@@ -48,6 +48,25 @@ shows in the status bar. The font has no lowercase, so capital letters are under
 
 Mouse: click to place the cursor, drag to select, wheel to scroll.
 
+## Sprite editor
+
+The `SPR` tab. Zoomed canvas on the left, palette, sprite number, flags and tools on the
+right, and one page of the sprite sheet (64 sprites) below.
+
+- Left click / drag on the canvas paints; right click picks the color under the mouse.
+- Click a palette color to select it, a sheet sprite to edit it, a flag box to toggle it.
+- `8X8` / `16` switches between editing one sprite and a 2×2 block.
+
+| Key | Action |
+|---|---|
+| `[` `]` / wheel | previous / next sprite |
+| 1–4 | sheet page |
+| P / F | pen / fill |
+| H / V | flip horizontally / vertically |
+| Delete | clear |
+| Ctrl+C, Ctrl+V | copy, paste |
+| Ctrl+Z, Ctrl+Y | undo, redo |
+
 ## Writing a cart
 
 A cart is a `.nib` file (nibble flavour, below) or a plain `.lua` file that defines any of these functions:
@@ -171,5 +190,5 @@ The full Lua standard library (`math`, `string`, `table`, …) is also available
 4. ~~Sprites & map: `spr`, `sspr`, `map`, `mget`, `mset`, sprite flags~~
 5. Audio: synth + `sfx`, `music`
 6. Cartridge format (code + gfx + map + sfx in one file)
-7. Built-in editors (sprite, map, sfx, code)
+7. Built-in editors: ~~code~~, ~~sprite~~, map, sfx
 8. Gamepads, screenshots/GIFs, web export
