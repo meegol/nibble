@@ -21,6 +21,9 @@ lua_State *api_load(const char *path, const char *code, size_t len, char *err, s
    Returns false and fills err with "path:line: message" on an error. */
 bool api_check(const char *path, const char *code, size_t len, char *err, size_t errlen);
 
+/* Is name[0..len) one of the built-in API functions (cls, spr, ...)? */
+bool api_is_function(const char *name, size_t len);
+
 /* Calls a global function if the cart defines it.
    Returns false and fills err (with traceback) on a Lua error. */
 bool api_call(lua_State *L, const char *name, char *err, size_t errlen);

@@ -33,6 +33,21 @@ opens as a new, empty cart.
 
 Closing the window with unsaved changes asks once; close again to discard them.
 
+## Code editor
+
+The `CODE` tab. Syntax errors are checked as you type: the line turns red and the message
+shows in the status bar. The font has no lowercase, so capital letters are underlined.
+
+| Key | Action |
+|---|---|
+| Arrows, Home, End, PgUp, PgDn | move (Ctrl: by word / to start or end of file; Shift: select) |
+| Enter | new line, keeping indentation (one more level after a `:`) |
+| Tab / Shift+Tab | indent / dedent (whole lines when several are selected) |
+| Ctrl+A, Ctrl+C, Ctrl+X, Ctrl+V | select all, copy, cut, paste |
+| Ctrl+Z, Ctrl+Y | undo, redo |
+
+Mouse: click to place the cursor, drag to select, wheel to scroll.
+
 ## Writing a cart
 
 A cart is a `.nib` file (nibble flavour, below) or a plain `.lua` file that defines any of these functions:

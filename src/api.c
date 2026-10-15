@@ -280,6 +280,12 @@ static void copy_error(lua_State *L, char *err, size_t errlen) {
     snprintf(err, errlen, "%s", msg ? msg : "unknown error");
 }
 
+bool api_is_function(const char *name, size_t len) {
+    for (const luaL_Reg *r = API; r->name; r++)
+        if (strlen(r->name) == len && strncmp(r->name, name, len) == 0) return true;
+    return false;
+}
+
 /* ---- loading ---- */
 
 static bool is_nib(const char *path) {

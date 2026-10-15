@@ -157,7 +157,13 @@ static bool handle_event(SDL_Renderer *ren, SDL_Window *win, SDL_Event *ev, bool
         if (ev->key.key == SDLK_ESCAPE) {
             if (mode == MODE_RUN) {
                 set_mode(MODE_EDIT);
-                if (failed && error_line() > 0) editor_goto_line(error_line());
+                if (failed) {
+                    if (error_line() > 0) editor_goto_line(error_line());
+                    /* the message without "path:line: " or the traceback */
+                    const char *msg = strstr(err, ": ");
+                    msg = msg && error_line() > 0 ? msg + 2 : err;
+                    editor_status("%.*s", (int)strcspn(msg, "\n"), msg);
+                }
             } else {
                 if (cart.version != run_version || failed) run();
                 set_mode(MODE_RUN);

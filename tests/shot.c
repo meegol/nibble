@@ -106,6 +106,7 @@ int main(int argc, char **argv) {
         return 1;
     }
     SDL_DestroySurface(s);
+    if (getenv("SHOT_CODE")) fputs(cart.code, stdout);
     cart_free(&cart);
     return 0;
 }
