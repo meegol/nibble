@@ -1,0 +1,49 @@
+# lesson 3: input
+#
+# btn(b)  true while b is held
+# btnp(b) true once per press
+#
+# 0 left  1 right  2 up  3 down
+# 4 o (z key)   5 x (x key)
+
+def _init():
+  px, py = 64, 64
+  speed = 1
+  col = 11
+
+def _update():
+  if btn(0): px -= speed
+  if btn(1): px += speed
+  if btn(2): py -= speed
+  if btn(3): py += speed
+
+  # mid(lo, x, hi) keeps x
+  # between lo and hi.
+  px = mid(4, px, 123)
+  py = mid(4, py, 123)
+
+  # btnp fires once, so this
+  # changes color once per press
+  if btnp(4):
+    col = flr(rnd(15)) + 1
+
+  # hold x to go faster
+  if btn(5):
+    speed = 3
+  else:
+    speed = 1
+
+def _draw():
+  cls(1)
+  circfill(px, py, 4, col)
+  print("arrows: move", 2,2, 13)
+  print("z: color  x: fast",
+        2, 9, 13)
+  # btn() with no argument gives
+  # all buttons as bits
+  print("buttons: " .. btn(),
+        2, 120, 14)
+
+# try: make up/down slower than
+# left/right, or wrap around the
+# screen edges instead of mid.

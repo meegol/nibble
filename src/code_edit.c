@@ -2,6 +2,7 @@
 #include "api.h"
 #include "editor.h"
 #include "gfx.h"
+#include "help.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -631,7 +632,31 @@ void code_draw(void) {
     }
 }
 
+/* Signature of the API function whose call the cursor is in, or whose name it's on. */
+static const char *signature_at_cursor(void) {
+    size_t s = lstart[line_of(cur)];
+    size_t p = cur;
+    /* inside a call: find the unmatched '(' to the left */
+    for (int depth = 0; p > s; p--) {
+        char c = buf[p - 1];
+        if (c == ')') depth++;
+        else if (c == '(' && depth-- == 0) {
+            size_t e = p - 1, b = e;
+            while (b > s && (isalnum((unsigned char)buf[b - 1]) || buf[b - 1] == '_')) b--;
+            const char *sig = help_signature(buf + b, e - b);
+            if (sig) return sig;
+        }
+    }
+    /* on a name */
+    size_t b = cur, e = cur;
+    while (b > s && (isalnum((unsigned char)buf[b - 1]) || buf[b - 1] == '_')) b--;
+    while (e < len && (isalnum((unsigned char)buf[e]) || buf[e] == '_')) e++;
+    return e > b ? help_signature(buf + b, e - b) : NULL;
+}
+
 void code_info(char *out, size_t n) {
+    const char *sig;
     if (err_line) snprintf(out, n, "!%d %s", err_line, err_msg);
+    else if ((sig = signature_at_cursor())) snprintf(out, n, "%s", sig);
     else snprintf(out, n, "line %d/%d col %d", line_of(cur) + 1, nlines, col_of(cur) + 1);
 }

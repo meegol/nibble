@@ -154,6 +154,7 @@ static bool handle_event(SDL_Renderer *ren, SDL_Window *win, SDL_Event *ev, bool
             set_mode(MODE_RUN);
             return true;
         }
+        if (ev->key.key == SDLK_F1 && mode == MODE_RUN) set_mode(MODE_EDIT);  /* editor opens help */
         if (ev->key.key == SDLK_ESCAPE) {
             if (mode == MODE_RUN) {
                 set_mode(MODE_EDIT);

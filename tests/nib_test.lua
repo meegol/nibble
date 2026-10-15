@@ -81,6 +81,19 @@ t("comparisons untouched", "x = a <= b and c >= d and e == f",
   "x = a <= b and c >= d and e == f")
 t("+= in call untouched", "f(x == 1)", "f(x == 1)")
 
+-- statements separated by ;
+t("compound then statement", "if btn(2): py -= 1; w = true",
+  "if btn(2) then py = py - (1); w = true end")
+t("two compounds", "x += 1; y -= 2", "x = x + (1); y = y - (2)")
+t("semicolon in string", 'x ..= "a;b"', 'x = x .. ("a;b")')
+
+-- headers spanning lines inside brackets
+t("multi-line if", "if (a and\n    b):\n  x()", "if (a and\n    b) then\n  x() end")
+t("multi-line def", "def f(a,\n      b):\n  x()", "function f(a,\n      b)\n  x() end")
+t("multi-line elif", "if a:\n  x()\nelif (b or\n      c):\n  y()\nz()",
+  "if a then\n  x()\nelseif (b or\n      c) then\n  y() end\nz()")
+t("multi-line plain lua if", "if (a and\n    b) then x() end", "if (a and\n    b) then x() end")
+
 -- comments
 t("hash comment", "# hi", "-- hi")
 t("indented hash comment", "  #hi", "  --hi")

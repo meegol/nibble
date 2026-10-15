@@ -1,0 +1,75 @@
+# lesson 4: sprites
+#
+# sprites are 8x8 pictures in
+# the sprite sheet. open the
+# spr tab (ctrl+tab) to see and
+# edit them. sprite 1 and 2 are
+# a walk cycle, 3 is a coin.
+#
+# spr(n, x, y) draws sprite n.
+# spr(n, x, y, 1, 1, true)
+# draws it flipped sideways.
+# color 0 is see-through.
+
+def _init():
+  px, py = 60, 60
+  facing_left = false
+  walking = false
+  frame = 0
+
+def _update():
+  if btn(0):
+    px -= 1
+    facing_left = true
+  if btn(1):
+    px += 1
+    facing_left = false
+  if btn(2): py -= 1
+  if btn(3): py += 1
+
+  # any arrow held?
+  walking = (btn(0) or btn(1) or
+             btn(2) or btn(3))
+
+  # switch frames every 8 ticks
+  if walking:
+    frame += 1
+  else:
+    frame = 0
+
+def _draw():
+  cls(6)
+  # 1 + (0 or 1) = sprite 1 or 2
+  # % is remainder: 7 % 2 = 1
+  local n = 1 + flr(frame/8) % 2
+  spr(n, px, py, 1, 1,
+      facing_left)
+
+  # a spinning coin: squash it
+  # with sspr (stretch draw).
+  # sprite 3 is at x 24 in the
+  # sheet (3 * 8).
+  local w = abs(flr(
+    math.cos(time() * 3) * 8))
+  sspr(24, 0, 8, 8,
+       100 - w / 2, 20, w, 8)
+
+  # big sprite: stretched 4x
+  sspr(8, 0, 8, 8, 4, 90,
+       32, 32)
+  print("arrows: walk", 2, 2, 7)
+
+def abs(n):
+  return math.abs(n)
+
+# try: draw a hat on sprite 1
+# in the spr tab, then esc.
+__gfx__
+00000000004444000044440000000000
+00000000004444000044440000444400
+0000000000099000000990000443c440
+0000000004999940049999400443c440
+00000000009999000099990004433440
+00000000009009000900009004433440
+00000000009009009000000900444400
+00000000000000000000000000000000

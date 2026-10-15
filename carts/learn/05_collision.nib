@@ -1,0 +1,63 @@
+# lesson 5: collision
+#
+# two boxes overlap when they
+# overlap on x and on y.
+
+def _init():
+  p = {x = 60, y = 60, w=8, h=8}
+  coins = {}
+  for i = 1, 8:
+    add_coin()
+  score = 0
+
+def add_coin():
+  # add() puts a value at the
+  # end of a list.
+  add(coins, {
+    x = flr(rnd(112)) + 8,
+    y = flr(rnd(100)) + 18,
+    w = 8, h = 8})
+
+def add(list, v):
+  table.insert(list, v)
+
+def overlap(a, b):
+  return a.x < b.x + b.w and
+         b.x < a.x + a.w and
+         a.y < b.y + b.h and
+         b.y < a.y + a.h
+
+def _update():
+  if btn(0): p.x -= 1
+  if btn(1): p.x += 1
+  if btn(2): p.y -= 1
+  if btn(3): p.y += 1
+
+  # go through the list
+  # backwards, so removing an
+  # item doesn't skip the next.
+  for i = #coins, 1, -1:
+    if overlap(p, coins[i]):
+      table.remove(coins, i)
+      score += 1
+      add_coin()
+
+def _draw():
+  cls(1)
+  for _, c in ipairs(coins):
+    spr(3, c.x, c.y)
+  spr(1, p.x, p.y)
+  print("score " .. score,
+        2, 2, 12)
+
+# try: make coins move, or add
+# a rock that resets the score.
+__gfx__
+00000000004444000000000000000000
+00000000004444000000000000444400
+0000000000099000000000000443c440
+0000000004999940000000000443c440
+00000000009999000000000004433440
+00000000009009000000000004433440
+00000000009009000000000000444400
+00000000000000000000000000000000

@@ -1,6 +1,7 @@
 #include "editor.h"
 #include "code_edit.h"
 #include "gfx.h"
+#include "help.h"
 #include "sprite_edit.h"
 #include "ui.h"
 
@@ -25,7 +26,9 @@ typedef struct {
 static const Tab TABS[] = {
     {"CODE", code_event, code_draw, code_info, true},
     {"SPR", sprite_event, sprite_draw, sprite_info, false},
+    {"?", help_event, help_draw, help_info, false},
 };
+#define TAB_HELP 2
 #define NUM_TABS (int)(sizeof TABS / sizeof TABS[0])
 
 static Cart *cart;
@@ -94,6 +97,10 @@ static int tab_x(int i) {
 void editor_event(const SDL_Event *ev) {
     if (ev->type == SDL_EVENT_KEY_DOWN && ev->key.key == SDLK_TAB && (ev->key.mod & SDL_KMOD_CTRL)) {
         set_tab(tab + ((ev->key.mod & SDL_KMOD_SHIFT) ? -1 : 1));
+        return;
+    }
+    if (ev->type == SDL_EVENT_KEY_DOWN && ev->key.key == SDLK_F1) {
+        set_tab(TAB_HELP);
         return;
     }
     if (ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev->button.y < EDIT_TOP) {

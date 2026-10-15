@@ -1,0 +1,60 @@
+# lesson 1: lua basics
+#
+# esc runs this cart. esc again
+# comes back here. change
+# something, then esc to see it.
+# f1 opens the help.
+
+# a variable holds a value.
+score = 10
+name = "nib"
+alive = true
+
+# a table holds many values.
+# lists start at 1, not 0!
+fruit = {"apple", "pear", "fig"}
+
+# tables can have named fields
+player = {x = 64, y = 40}
+player.x += 5
+
+# def makes a function.
+# its body is indented.
+def double(n):
+  return n * 2
+
+# local: only visible inside
+# the function it's in.
+def join(list):
+  local s = ""
+  for i = 1, #list:
+    s ..= list[i] .. " "
+  return s
+
+def _draw():
+  cls(1)
+  color(12)
+  # print(text) prints the
+  # next line down.
+  # .. joins strings.
+  print("score: " .. score)
+  print("name: " .. name)
+  print("double(21) = " ..
+        double(21))
+  print("#fruit = " .. #fruit)
+  print(join(fruit))
+  print("player.x " .. player.x)
+
+  # if / elif / else
+  if score > 100:
+    print("high score", 4,80, 4)
+  elif score > 5:
+    print("doing ok", 4,80, 5)
+  else:
+    print("keep going", 4,80, 2)
+
+  if alive and score > 0:
+    print("alive", 4,88, 11)
+
+# try: set score = 500, add a
+# fruit, or make double triple.

@@ -91,12 +91,13 @@ static int l_circfill(lua_State *L) {
 
 /* print(s, [x, y], [col]) -- without x,y prints at the cursor. */
 static int l_print(lua_State *L) {
-    const char *s = luaL_tolstring(L, 1, NULL);
+    /* read the numbers first: luaL_tolstring pushes onto the stack */
     if (!lua_isnoneornil(L, 2)) {
         cursor_x = argi(L, 2);
         cursor_y = opti(L, 3, cursor_y);
     }
-    cursor_y = gfx_print(s, cursor_x, cursor_y, optcol(L, 4));
+    int col = optcol(L, 4);
+    cursor_y = gfx_print(luaL_tolstring(L, 1, NULL), cursor_x, cursor_y, col);
     return 0;
 }
 

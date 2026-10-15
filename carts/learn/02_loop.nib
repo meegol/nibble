@@ -1,0 +1,54 @@
+# lesson 2: the game loop
+#
+# nibble calls three functions:
+#   _init()   once at the start
+#   _update() 60 times a second
+#   _draw()   to paint a frame
+#
+# _update changes the world,
+# _draw shows it. keep drawing
+# out of _update.
+
+def _init():
+  # a ball: position + speed
+  ball = {x = 64, y = 64, r = 6,
+          dx = 1.5, dy = 1}
+  frames = 0
+
+def _update():
+  frames += 1
+  ball.x += ball.dx
+  ball.y += ball.dy
+
+  # bounce off the walls by
+  # flipping the speed.
+  if ball.x < ball.r:
+    ball.dx = abs(ball.dx)
+  if ball.x > 127 - ball.r:
+    ball.dx = -abs(ball.dx)
+  if ball.y < ball.r:
+    ball.dy = abs(ball.dy)
+  if ball.y > 127 - ball.r:
+    ball.dy = -abs(ball.dy)
+
+def _draw():
+  # cls wipes the last frame.
+  # remove it and see why!
+  cls(0)
+  circfill(ball.x, ball.y,
+           ball.r, 9)
+  print("frames: " .. frames,
+        2, 2, 13)
+  # time() is seconds since
+  # the cart started.
+  print("time: " .. flr(time()),
+        2, 9, 13)
+
+# math functions live in the
+# math table.
+def abs(n):
+  return math.abs(n)
+
+# try: change dx and dy, the
+# radius, or the color (0-15,
+# see the palette in f1 help).

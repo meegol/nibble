@@ -123,7 +123,8 @@ local HEADERS = {
   { pat = "^local%s+def%f[^%w_]", kind = "def", colon = "", kw = "function" },
 }
 
--- Finds a block header on a clean line: returns header, colon position.
+-- Finds a block header on a clean line: returns header, colon position (nil when the
+-- colon isn't on this line).
 local function find_header(text, info, indent)
   local rest = text:sub(indent + 1)
   for _, h in ipairs(HEADERS) do
@@ -134,7 +135,7 @@ local function find_header(text, info, indent)
           return h, j
         end
       end
-      return nil
+      return h, nil
     end
   end
 end
@@ -179,6 +180,25 @@ function M.translate(src)
     edits[i][#edits[i] + 1] = { pos = pos, len = len, repl = repl, seq = seq }
   end
 
+  local pending  -- a header whose colon is on a later line
+
+  -- Rewrites compound assignments in each ;-separated statement of text[from..cend].
+  local function compounds(i, text, info, from)
+    local start = from
+    for j = from, info.cend + 1 do
+      local stop = j > info.cend
+          or (text:sub(j, j) == ";" and info.kinds[j] == "c" and info.depths[j] == 0)
+      if stop then
+        local e = j - 1
+        while e >= start and text:sub(e, e):match("%s") do e = e - 1 end
+        for _, ed in ipairs(compound(text, info, start, e) or {}) do
+          edit(i, ed.pos, ed.len, ed.repl)
+        end
+        start = j + 1
+      end
+    end
+  end
+
   local function add_ends(k)
     if k > 0 and last_content then
       edit(last_content, infos[last_content].cend + 1, 0, (" end"):rep(k))
@@ -210,6 +230,9 @@ function M.translate(src)
       end
 
       local h, colon = find_header(text, info, n)
+      -- a header can continue onto later lines while a bracket is open
+      local multiline = h and not colon and #st.brackets > 0
+      if h and not colon and not multiline then h = nil end
       local continues = h and (h.kind == "elif" or h.kind == "else")
 
       local top = stack[#stack]
@@ -247,19 +270,29 @@ function M.translate(src)
         elseif h.kw then
           edit(i, kwpos, 3, "function")
         end
-        edit(i, colon, 1, h.colon)
-        local oneline = colon < info.cend
-        stack[#stack + 1] = {
-          indent = n, line = i, oneline = oneline,
+        local block = {
+          indent = n, line = i,
           kind = (h.kind == "loop" or h.kind == "def") and "other" or "if",
         }
-        stmt_from = oneline and colon + 1 or nil
-      end
-      if stmt_from then
-        for _, e in ipairs(compound(text, info, stmt_from, info.cend) or {}) do
-          edit(i, e.pos, e.len, e.repl)
+        if multiline then
+          pending = { block = block, h = h }
+          stmt_from = nil
+        else
+          edit(i, colon, 1, h.colon)
+          block.oneline = colon < info.cend
+          stack[#stack + 1] = block
+          stmt_from = block.oneline and colon + 1 or nil
         end
       end
+      if stmt_from then compounds(i, text, info, stmt_from) end
+    elseif pending and #st.brackets == 0 then
+      -- the line closing a multi-line header must end with its colon
+      local c = info.cend
+      if c and text:sub(c, c) == ":" and info.kinds[c] == "c" and info.depths[c] == 0 then
+        edit(i, c, 1, pending.h.colon)
+        stack[#stack + 1] = pending.block
+      end
+      pending = nil
     end
 
     if info.can_end then last_content = i end

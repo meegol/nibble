@@ -29,9 +29,24 @@ opens as a new, empty cart.
 | Ctrl+R | run from the start |
 | Ctrl+S | save |
 | Ctrl+Tab | next editor tab |
+| F1 | help |
 | F11 | fullscreen |
 
 Closing the window with unsaved changes asks once; close again to discard them.
+
+## Learning
+
+`carts/learn/` has six short lessons, each a cart to read, run and change:
+
+1. `01_lua.nib` — variables, tables, functions, `if`
+2. `02_loop.nib` — `_init`, `_update`, `_draw`
+3. `03_input.nib` — buttons
+4. `04_sprites.nib` — `spr`, animation, flipping, stretching
+5. `05_collision.nib` — lists of objects, overlap checks
+6. `06_game.nib` — a small complete game with title and game over
+
+The `?` tab (F1) is a reference for keys, the dialect, every API function and the palette.
+In the code editor, the status bar shows the arguments of the API function the cursor is in.
 
 ## Code editor
 
@@ -129,7 +144,9 @@ def _update():
 
 - A block colon is a `:` at the end of the line, or followed by a space for the one-line form. `obj:method()` is unaffected.
 - `#t` (length) is still length; `#` starts a comment only at the start of a line or when followed by whitespace.
-- Inside `()`, `{}` and `[]`, indentation doesn't matter.
+- Inside `()`, `{}` and `[]`, indentation doesn't matter, so a long header can span lines
+  inside brackets: `if (a and` / `    b):`.
+- `;` separates statements on one line: `if hit: x -= 1; y = 0`.
 - Plain Lua still works inside a `.nib` file, including `function() ... end` and `do ... end` blocks.
 - Don't mix tabs and spaces for indentation.
 
@@ -173,14 +190,14 @@ The full Lua standard library (`math`, `string`, `table`, …) is also available
 
 - `src/main.c` — window, fixed 60 fps loop, run/edit modes, hot reload, error screen
 - `src/editor.c` — editor shell: tabs, top and status bars, input routing
-- `src/code_edit.c`, `src/sprite_edit.c` — the editors
+- `src/code_edit.c`, `src/sprite_edit.c`, `src/help.c` — the editor tabs
 - `src/gfx.c` — indexed framebuffer, drawing primitives, built-in font
 - `src/api.c` — Lua bindings and cart lifecycle
 - `src/cart.c` — cart file: code plus sprite, flag and map data
 - `src/nib.lua` — nibble flavour translator, embedded in the binary at build time
 - `tests/` — translator, cart file and drawing tests; `shot.c` renders the editor to a PNG
   from scripted input (`make build/shot`)
-- `carts/` — example carts
+- `carts/` — example carts; `carts/learn/` — lessons
 
 ## Roadmap
 

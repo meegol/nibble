@@ -1,0 +1,101 @@
+# lesson 6: a whole game
+#
+# catch the stars. miss three
+# and it's over. press z to
+# start.
+#
+# the game has states: "title",
+# "play" and "over". _update
+# and _draw check the state.
+
+def _init():
+  state = "title"
+  best = 0
+
+def start():
+  state = "play"
+  px = 60
+  stars = {}
+  score = 0
+  lives = 3
+  timer = 0
+
+def _update():
+  if state == "play":
+    update_play()
+  elif btnp(4):
+    start()
+
+def update_play():
+  if btn(0): px -= 2
+  if btn(1): px += 2
+  px = mid(0, px, 120)
+
+  # a new star every so often,
+  # faster as the score grows
+  timer -= 1
+  if timer <= 0:
+    local s = {y = 0}
+    s.x = flr(rnd(120))
+    table.insert(stars, s)
+    timer = 40 - min(score, 30)
+
+  for i = #stars, 1, -1:
+    local s = stars[i]
+    s.y += 1 + score / 20
+    # a long condition can span
+    # lines inside ( )
+    if (s.y > 104 and s.y < 112
+        and abs(s.x - px) < 7):
+      table.remove(stars, i)
+      score += 1
+    elif s.y > 128:
+      table.remove(stars, i)
+      lives -= 1
+
+  if lives <= 0:
+    state = "over"
+    best = math.max(best, score)
+
+def _draw():
+  cls(8)
+  if state == "title":
+    print("catch stars",42,50,4)
+    print("z to start",44,62,12)
+  elif state == "play":
+    draw_play()
+  else:
+    draw_play()
+    print("game over",46,50,2)
+    print("best " .. best,
+          50, 58, 12)
+    print("z to retry",44,66,13)
+
+def draw_play():
+  for _, s in ipairs(stars):
+    spr(4, s.x, s.y)
+  local n = 1+flr(time()*6) % 2
+  spr(n, px, 108)
+  line(0, 116, 127, 116, 6)
+  print("score "..score,2,2,12)
+  for i = 1, lives:
+    spr(5, 128 - i * 9, 1)
+
+def abs(n):
+  return math.abs(n)
+
+def min(a, b):
+  return math.min(a, b)
+
+# try: add a power-up, a pause
+# on x, or sound when sound
+# arrives in nibble.
+__gfx__
+000000000044440000444400000000000004000000000000
+000000000044440000444400000000000044400002200220
+000000000009900000099000000000004444444022222222
+000000000499994004999940000000000444440022222222
+000000000099990000999900000000000044400002222220
+000000000090090009000090000000000440440000222200
+000000000090090090000009000000004400044000022000
+000000000000000000000000000000000000000000000000
