@@ -166,7 +166,7 @@ static bool handle_event(SDL_Renderer *ren, SDL_Window *win, SDL_Event *ev, bool
                     editor_status("%.*s", (int)strcspn(msg, "\n"), msg);
                 }
             } else {
-                if (cart.version != run_version || failed) run();
+                if (!L || failed || cart.version != run_version) run();
                 set_mode(MODE_RUN);
             }
             return true;
