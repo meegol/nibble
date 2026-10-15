@@ -1,0 +1,47 @@
+# nibble demo cart
+# arrows/wasd: move   z: recolor balls
+
+def _init():
+  px, py = 64, 90
+  balls = {}
+  for i = 1, 10:
+    balls[i] = {
+      x = rnd(100) + 14, y = rnd(60) + 24,
+      dx = rnd(2) - 1, dy = rnd(2) - 1,
+      r = flr(rnd(4)) + 2, c = flr(rnd(11)) + 1,
+    }
+
+def _update():
+  if btn(0): px -= 1
+  if btn(1): px += 1
+  if btn(2): py -= 1
+  if btn(3): py += 1
+  px, py = mid(6, px, 121), mid(22, py, 108)
+
+  for _, b in ipairs(balls):
+    b.x, b.y = b.x + b.dx, b.y + b.dy
+    if b.x < 1 + b.r or b.x > 126 - b.r: b.dx = -b.dx
+    if b.y < 17 + b.r or b.y > 112 - b.r: b.dy = -b.dy
+
+  if btnp(4):
+    for _, b in ipairs(balls): b.c = flr(rnd(11)) + 1
+
+def _draw():
+  cls(0)
+
+  # scrolling stripes
+  for i = 0, 11:
+    local y = 16 + (i * 8 + flr(time() * 12)) % 96
+    line(1, y, 126, y, 15)
+
+  for _, b in ipairs(balls): circfill(b.x, b.y, b.r, b.c)
+
+  circfill(px, py, 4, 4)
+  circ(px, py, 6 + flr(time() * 4) % 2, 3)
+
+  # header: title + palette strip
+  print("NIBBLE", 52, 3, 12)
+  for i = 0, 15: rectfill(i * 8, 10, i * 8 + 7, 13, i)
+
+  rect(0, 15, 127, 113, 14)
+  print("arrows: move   z: recolor", 14, 118, 13)

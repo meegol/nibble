@@ -12,9 +12,14 @@ void api_reset(void);
 /* Feeds one frame of button state (bit i = button i held). */
 void api_input(uint8_t held);
 
-/* Creates a Lua state with the nibble API and runs the cart file.
+/* Creates a Lua state with the nibble API and runs the cart file
+   (.nib carts are translated from nibble flavour first).
    Returns NULL and fills err on failure. */
 lua_State *api_load(const char *path, char *err, size_t errlen);
+
+/* Compiles a cart without running it (.nib carts are translated first).
+   Returns false and fills err with "path:line: message" on an error. */
+bool api_check(const char *path, char *err, size_t errlen);
 
 /* Calls a global function if the cart defines it.
    Returns false and fills err (with traceback) on a Lua error. */

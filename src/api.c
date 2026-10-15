@@ -1,5 +1,6 @@
 #include "api.h"
 #include "gfx.h"
+#include "nib_lua.h"
 
 #include <lauxlib.h>
 #include <lualib.h>
@@ -194,6 +195,113 @@ static void copy_error(lua_State *L, char *err, size_t errlen) {
     snprintf(err, errlen, "%s", msg ? msg : "unknown error");
 }
 
+/* ---- nibble flavour (.nib) ---- */
+
+static bool is_nib(const char *path) {
+    size_t n = strlen(path);
+    return n >= 4 && strcmp(path + n - 4, ".nib") == 0;
+}
+
+/* Reads a whole file into a malloc'd buffer. */
+static char *read_file(const char *path, size_t *len) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+    char *buf = NULL;
+    size_t cap = 0, n = 0;
+    for (;;) {
+        if (n == cap) {
+            char *grown = realloc(buf, cap = cap ? cap * 2 : 4096);
+            if (!grown) { free(buf); fclose(f); return NULL; }
+            buf = grown;
+        }
+        size_t got = fread(buf + n, 1, cap - n, f);
+        n += got;
+        if (got == 0) break;
+    }
+    fclose(f);
+    *len = n;
+    return buf;
+}
+
+/* Calls nib.<fn>(file contents, chunkname) and leaves its results on the stack.
+   Returns the number of results, or -1 with err filled. */
+static int call_nib(lua_State *L, const char *fn, const char *path, char *err, size_t errlen) {
+    size_t len;
+    char *src = read_file(path, &len);
+    if (!src) {
+        snprintf(err, errlen, "cannot open %s", path);
+        return -1;
+    }
+    int top = lua_gettop(L);
+    if (luaL_loadbuffer(L, NIB_LUA, sizeof NIB_LUA - 1, "=nib") != LUA_OK
+        || lua_pcall(L, 0, 1, 0) != LUA_OK) {
+        free(src);
+        copy_error(L, err, errlen);
+        lua_settop(L, top);
+        return -1;
+    }
+    lua_getfield(L, -1, fn);
+    lua_remove(L, -2);
+    lua_pushlstring(L, src, len);
+    free(src);
+    lua_pushfstring(L, "@%s", path);
+    if (lua_pcall(L, 2, LUA_MULTRET, 0) != LUA_OK) {
+        copy_error(L, err, errlen);
+        lua_settop(L, top);
+        return -1;
+    }
+    return lua_gettop(L) - top;
+}
+
+/* Formats a (line, msg) pair left on the stack by nib as "path:line: msg". */
+static void nib_error(lua_State *L, int line_idx, const char *path, char *err, size_t errlen) {
+    snprintf(err, errlen, "%s:%d: %s", path, (int)lua_tointeger(L, line_idx),
+             lua_tostring(L, line_idx + 1));
+}
+
+/* Pushes the compiled chunk for a .nib cart. */
+static bool load_nib(lua_State *L, const char *path, char *err, size_t errlen) {
+    int top = lua_gettop(L);
+    if (call_nib(L, "translate", path, err, errlen) < 0) return false;
+    if (lua_isnil(L, top + 1)) {
+        nib_error(L, top + 2, path, err, errlen);
+        lua_settop(L, top);
+        return false;
+    }
+    size_t len;
+    const char *lua_src = lua_tolstring(L, top + 1, &len);
+    char chunkname[512];
+    snprintf(chunkname, sizeof chunkname, "@%s", path);
+    if (luaL_loadbuffer(L, lua_src, len, chunkname) != LUA_OK) {
+        copy_error(L, err, errlen);
+        lua_settop(L, top);
+        return false;
+    }
+    lua_replace(L, top + 1);
+    lua_settop(L, top + 1);
+    return true;
+}
+
+bool api_check(const char *path, char *err, size_t errlen) {
+    lua_State *L = luaL_newstate();
+    if (!L) {
+        snprintf(err, errlen, "out of memory");
+        return false;
+    }
+    luaL_openlibs(L);
+    bool ok;
+    if (is_nib(path)) {
+        int n = call_nib(L, "check", path, err, errlen);
+        ok = n == 0 || (n > 0 && lua_isnil(L, 1));
+        if (n > 0 && !ok) nib_error(L, 1, path, err, errlen);
+    } else {
+        ok = luaL_loadfile(L, path) == LUA_OK;
+        if (!ok) copy_error(L, err, errlen);
+    }
+    lua_close(L);
+    return ok;
+}
+
 lua_State *api_load(const char *path, char *err, size_t errlen) {
     lua_State *L = luaL_newstate();
     if (!L) {
@@ -204,7 +312,17 @@ lua_State *api_load(const char *path, char *err, size_t errlen) {
     for (const luaL_Reg *r = API; r->name; r++) lua_register(L, r->name, r->func);
 
     lua_pushcfunction(L, traceback);
-    if (luaL_loadfile(L, path) != LUA_OK || lua_pcall(L, 0, 0, -2) != LUA_OK) {
+    if (is_nib(path)) {
+        if (!load_nib(L, path, err, errlen)) {
+            lua_close(L);
+            return NULL;
+        }
+    } else if (luaL_loadfile(L, path) != LUA_OK) {
+        copy_error(L, err, errlen);
+        lua_close(L);
+        return NULL;
+    }
+    if (lua_pcall(L, 0, 0, -2) != LUA_OK) {
         copy_error(L, err, errlen);
         lua_close(L);
         return NULL;

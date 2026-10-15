@@ -6,6 +6,7 @@
 #include <lua.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define SCALE        5
 #define STEP_NS      (SDL_NS_PER_SECOND / 60)
@@ -76,7 +77,13 @@ static uint8_t read_buttons(void) {
 }
 
 int main(int argc, char **argv) {
-    cart_path = argc > 1 ? argv[1] : "carts/demo.lua";
+    if (argc > 2 && strcmp(argv[1], "--check") == 0) {
+        if (api_check(argv[2], err, sizeof err)) return 0;
+        puts(err);
+        return 1;
+    }
+
+    cart_path = argc > 1 ? argv[1] : "carts/demo.nib";
 
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());

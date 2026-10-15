@@ -7,9 +7,13 @@ Written in C with SDL3 and Lua 5.4.
 
 ```sh
 make            # needs sdl3 and lua5.4 (Arch: pacman -S sdl3 lua54)
-make run        # runs carts/demo.lua
-./nibble path/to/cart.lua
+make run        # runs carts/demo.nib
+make test       # translator tests (needs lua5.4)
+./nibble path/to/cart.nib
+./nibble --check path/to/cart.nib   # report syntax errors without running
 ```
+
+`--check` prints `file:line: message` and exits 1 on an error, so it can be used as a linter from another editor.
 
 Saving the cart file reloads it automatically. Lua errors show on screen.
 
@@ -24,13 +28,49 @@ Saving the cart file reloads it automatically. Lua errors show on screen.
 
 ## Writing a cart
 
-A cart is a Lua file that defines any of these functions:
+A cart is a `.nib` file (nibble flavour, below) or a plain `.lua` file that defines any of these functions:
 
-```lua
-function _init()   end  -- once at load
-function _update() end  -- 60 times per second
-function _draw()   end  -- after updates, once per rendered frame
+```python
+def _init():      # once at load
+    x = 0
+def _update():    # 60 times per second
+    x = (x + 1) % 128
+def _draw():      # after updates, once per rendered frame
+    cls()
+    circfill(x, 64, 4, 9)
 ```
+
+## nibble flavour
+
+`.nib` carts are Lua with Python-style blocks. Each line is rewritten in place before
+Lua sees it, so error line numbers match the file.
+
+```python
+def _update():
+    if btn(0): px -= 1
+    elif btn(1): px += 1
+    for _, b in ipairs(balls):
+        b.x += b.dx
+        if b.x < 1 or b.x > 126:
+            b.dx = -b.dx   # bounce
+```
+
+| Write | Lua |
+|---|---|
+| `if c:` `elif c:` `else:` | `if c then` `elseif c then` `else` |
+| `while c:` `for ...:` | `while c do` `for ... do` |
+| `def f(a):` `local def f():` | `function f(a)` `local function f()` |
+| less indentation | `end` |
+| `if c: stmt` | `if c then stmt end` |
+| `a != b` | `a ~= b` |
+| `x += e` (`-=` `*=` `/=` `..=`) | `x = x + (e)` |
+| `# comment` | `-- comment` |
+
+- A block colon is a `:` at the end of the line, or followed by a space for the one-line form. `obj:method()` is unaffected.
+- `#t` (length) is still length; `#` starts a comment only at the start of a line or when followed by whitespace.
+- Inside `()`, `{}` and `[]`, indentation doesn't matter.
+- Plain Lua still works inside a `.nib` file, including `function() ... end` and `do ... end` blocks.
+- Don't mix tabs and spaces for indentation.
 
 ## API
 
@@ -66,6 +106,8 @@ The full Lua standard library (`math`, `string`, `table`, …) is also available
 - `src/main.c` — window, fixed 60 fps loop, input, hot reload, error screen
 - `src/gfx.c` — indexed framebuffer, drawing primitives, built-in font
 - `src/api.c` — Lua bindings and cart lifecycle
+- `src/nib.lua` — nibble flavour translator, embedded in the binary at build time
+- `tests/` — translator tests
 - `carts/` — example carts
 
 ## Roadmap
