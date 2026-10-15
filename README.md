@@ -61,6 +61,9 @@ Closing the window with unsaved changes asks once; close again to discard them.
 5. `05_collision.nib` — lists of objects, overlap checks
 6. `06_game.nib` — a small complete game with title and game over
 
+`carts/soul_tax.nib` is a full game to pick apart: tower defense where Death also pays tax
+after every wave.
+
 The `?` tab (F1) is a reference for keys, the dialect, every API function and the palette.
 In the code editor, the status bar shows the arguments of the API function the cursor is in.
 

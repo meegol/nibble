@@ -1,0 +1,500 @@
+# soul tax
+#
+# you are death. keep the ghosts
+# in purgatory, and after every
+# wave pay the celestial revenue
+# service. unpaid tax becomes
+# debt with interest. too much
+# debt and they take your scythe.
+#
+# arrows  move the reaper
+# z       build / upgrade
+#         (on the path: next wave)
+# x       change tower / sell
+
+TYPES = {
+  {name = "scythe", cost = 10,
+   range = {14, 17, 20}, dmg = {2, 3, 5}, cd = {20, 17, 14}},
+  {name = "lantern", cost = 15,
+   range = {16, 20, 24}, slow = {0.55, 0.45, 0.35}},
+  {name = "bell", cost = 25,
+   range = {20, 22, 25}, dmg = {2, 4, 6}, cd = {70, 60, 50}},
+}
+
+KINDS = {
+  wisp = {s = 3, hp = 3, hpr = 1, spd = 0.7, pay = 2},
+  shade = {s = 5, hp = 8, hpr = 2, spd = 0.45, pay = 3},
+  wraith = {s = 7, hp = 20, hpr = 4, spd = 0.32, pay = 6},
+  boss = {s = 20, hp = 80, hpr = 15, spd = 0.25, pay = 25},
+}
+
+# the path, in map cells
+WPS = {{0, 1}, {13, 1}, {13, 5}, {2, 5}, {2, 10}, {15, 10}}
+
+# graves and dead trees: can't build there
+DECOR = {{4, 3, 18}, {9, 3, 19}, {6, 7, 18}, {10, 7, 18},
+         {5, 12, 19}, {11, 12, 18}, {0, 7, 19}, {15, 4, 18}}
+
+DEBT_MAX = 40
+
+QUIPS = {
+  "death and taxes, dear.",
+  "even you can't escape this.",
+  "nice scythe. very taxable.",
+  "we audit the immortal too.",
+  "souls are income. sorry.",
+}
+
+def add(t, v):
+  table.insert(t, v)
+
+def sgn(n):
+  if n > 0: return 1
+  if n < 0: return -1
+  return 0
+
+def _init():
+  state = "title"
+  best = 0
+  build_map()
+
+def build_map():
+  path, blocked = {}, {}
+  for r = 0, 13:
+    for c = 0, 15:
+      mset(c, r, 17)
+  for i = 1, #WPS - 1:
+    local a, b = WPS[i], WPS[i + 1]
+    local dx, dy = sgn(b[1] - a[1]), sgn(b[2] - a[2])
+    local c, r = a[1], a[2]
+    while true:
+      path[r * 16 + c] = true
+      mset(c, r, 16)
+      if c == b[1] and r == b[2]: break
+      c += dx; r += dy
+  for _, d in ipairs(DECOR):
+    blocked[d[2] * 16 + d[1]] = true
+    mset(d[1], d[2], d[3])
+  local s, e = WPS[1], WPS[#WPS]
+  mset(s[1], s[2], 14)
+  mset(e[1], e[2], 15)
+
+def new_game():
+  state = "play"
+  souls, lives, wave, debt = 40, 10, 0, 0
+  towers, ghosts, fx, queue = {}, {}, {}, {}
+  cx, cy, sel = 7, 7, 1
+  waving, income, shake = false, 0, 0
+  say("z on the path calls the dead", 240)
+
+def say(s, t):
+  msg, msg_t = s, t or 90
+
+# ---------------- update
+
+def _update():
+  if state == "play":
+    update_play()
+  elif state == "tax":
+    update_tax()
+  elif btnp(4):
+    new_game()
+
+def update_play():
+  if msg_t > 0: msg_t -= 1
+  if shake > 0: shake -= 1
+  move_cursor()
+  if btnp(4): press_z()
+  if btnp(5): press_x()
+  if waving: update_wave()
+  for k, t in pairs(towers): update_tower(t)
+  update_ghosts()
+  update_fx()
+  if lives <= 0: game_over("breach")
+  elif waving and #queue == 0 and #ghosts == 0:
+    open_tax()
+
+def move_cursor():
+  if btnp(0): cx -= 1
+  if btnp(1): cx += 1
+  if btnp(2): cy -= 1
+  if btnp(3): cy += 1
+  cx, cy = mid(0, cx, 15), mid(0, cy, 13)
+
+def up_cost(t):
+  return TYPES[t.type].cost * t.lv
+
+def press_z():
+  local key = cy * 16 + cx
+  local t = towers[key]
+  if t:
+    if t.lv == 3: return say("already max level")
+    local c = up_cost(t)
+    if souls < c: return say("need " .. c .. " souls")
+    souls -= c
+    t.lv += 1
+    t.spent += c
+    pop(cx * 8 + 4, cy * 8 + 8, "level " .. t.lv, 10)
+  elif path[key]:
+    if waving: say("they're already coming")
+    else: start_wave()
+  elif blocked[key]:
+    say("consecrated ground")
+  else:
+    local T = TYPES[sel]
+    if souls < T.cost: return say("need " .. T.cost .. " souls")
+    souls -= T.cost
+    towers[key] = {type = sel, lv = 1, spent = T.cost, cd = 0,
+                   x = cx * 8 + 4, y = cy * 8 + 12, anim = 0}
+
+def press_x():
+  local key = cy * 16 + cx
+  local t = towers[key]
+  if t:
+    local back = flr(t.spent / 2)
+    souls += back
+    towers[key] = nil
+    pop(t.x, t.y - 4, "+" .. back, 11)
+  else:
+    sel = sel % #TYPES + 1
+
+def start_wave():
+  wave += 1
+  waving, income = true, 0
+  queue = {}
+  for i = 1, 5 + wave * 2:
+    local k, roll = "wisp", rnd(1)
+    if wave >= 2 and roll < 0.45: k = "shade"
+    if wave >= 4 and roll < 0.18: k = "wraith"
+    add(queue, k)
+  if wave % 5 == 0: add(queue, "boss")
+  spawn_t = 0
+  spawn_gap = math.max(14, 42 - wave * 2)
+  say("wave " .. wave .. ". the dead stir.")
+
+def update_wave():
+  if #queue == 0: return
+  spawn_t -= 1
+  if spawn_t > 0: return
+  spawn_t = spawn_gap
+  local K = KINDS[table.remove(queue, 1)]
+  local hp = flr((K.hp + K.hpr * (wave - 1)) * 1.06 ^ (wave - 1))
+  add(ghosts, {k = K, hp = hp, max = hp, wp = 2, dist = 0,
+               x = WPS[1][1] * 8 + 4, y = WPS[1][2] * 8 + 12,
+               slow = 0, slowf = 1, flash = 0, left = false})
+
+def first_in(x, y, r):
+  local best_g = nil
+  for _, g in ipairs(ghosts):
+    local dx, dy = g.x - x, g.y - y
+    if g.hp > 0 and dx * dx + dy * dy <= r * r:
+      if not best_g or g.dist > best_g.dist: best_g = g
+  return best_g
+
+def hurt(g, d):
+  g.hp -= d
+  g.flash = 4
+
+def update_tower(t):
+  local T = TYPES[t.type]
+  local r = T.range[t.lv]
+  t.cd -= 1
+  if t.anim > 0: t.anim -= 1
+  if t.type == 2:
+    for _, g in ipairs(ghosts):
+      local dx, dy = g.x - t.x, g.y - t.y
+      if dx * dx + dy * dy <= r * r:
+        g.slowf = math.min(g.slow > 0 and g.slowf or 1, T.slow[t.lv])
+        g.slow = 2
+    return
+  if t.cd > 0: return
+  local g = first_in(t.x, t.y, r)
+  if not g: return
+  t.cd, t.anim = T.cd[t.lv], 10
+  if t.type == 1:
+    hurt(g, T.dmg[t.lv])
+    t.tx, t.ty = g.x, g.y
+  else:
+    for _, o in ipairs(ghosts):
+      local dx, dy = o.x - t.x, o.y - t.y
+      if dx * dx + dy * dy <= r * r: hurt(o, T.dmg[t.lv])
+
+def update_ghosts():
+  for i = #ghosts, 1, -1:
+    local g = ghosts[i]
+    if g.flash > 0: g.flash -= 1
+    local spd = g.k.spd
+    if g.slow > 0: spd *= g.slowf; g.slow -= 1
+    local w = WPS[g.wp]
+    local tx, ty = w[1] * 8 + 4, w[2] * 8 + 12
+    local dx, dy = tx - g.x, ty - g.y
+    local d = math.sqrt(dx * dx + dy * dy)
+    if dx != 0: g.left = dx < 0
+    g.dist += spd
+    if d <= spd:
+      g.x, g.y = tx, ty
+      g.wp += 1
+    else:
+      g.x += dx / d * spd
+      g.y += dy / d * spd
+    if g.hp <= 0:
+      table.remove(ghosts, i)
+      souls += g.k.pay
+      income += g.k.pay
+      add(fx, {kind = "soul", x = g.x, y = g.y, t = 0})
+      pop(g.x, g.y - 6, "+" .. g.k.pay, 11)
+    elif g.wp > #WPS:
+      table.remove(ghosts, i)
+      lives -= 1
+      shake = 8
+      say("a ghost slipped out!")
+
+def pop(x, y, s, col):
+  add(fx, {kind = "text", x = x - #s * 2, y = y, t = 0, s = s, col = col})
+
+def update_fx():
+  for i = #fx, 1, -1:
+    local f = fx[i]
+    f.t += 1
+    if f.kind == "soul":
+      # drift up to the soul counter
+      f.x += (4 - f.x) * 0.08
+      f.y += (4 - f.y) * 0.08
+      if f.t > 50: table.remove(fx, i)
+    else:
+      f.y -= 0.4
+      if f.t > 30: table.remove(fx, i)
+
+def game_over(why):
+  state, reason = "over", why
+  best = math.max(best, wave)
+
+# ---------------- taxes
+
+def open_tax():
+  waving = false
+  # wages for a wave's work. taxable, of course.
+  local wage = 5 + wave
+  souls += wage
+  income += wage
+  local prop = 0
+  for _, t in pairs(towers): prop += 1
+  bill = {
+    {"earned, incl. wage " .. wage, income},
+    {"income tax 30%", flr(income * 0.3)},
+    {"property tax", prop},
+    {"reaping license", wave},
+  }
+  if souls > 50:
+    add(bill, {"hoarding 10% over 50", math.ceil((souls - 50) * 0.1)})
+  if debt > 0:
+    add(bill, {"old debt +25%", math.ceil(debt * 1.25)})
+  total = 0
+  for i = 2, #bill: total += bill[i][2]
+  disputed, verdict = false, nil
+  quip = QUIPS[flr(rnd(#QUIPS)) + 1]
+  tax_t = 0
+  state = "tax"
+
+def update_tax():
+  tax_t += 1
+  if tax_t < 30: return
+  if btnp(5) and not disputed:
+    disputed = true
+    if rnd(1) < 0.5:
+      total = flr(total / 2)
+      verdict = "dispute won. half off."
+    else:
+      total = math.ceil(total * 1.5)
+      verdict = "dispute lost. +50% fine."
+  elif btnp(4):
+    if souls >= total:
+      souls -= total
+      debt = 0
+      say("paid in full. " .. souls .. " souls left.")
+    else:
+      debt = total - souls
+      souls = 0
+      say("short " .. debt .. ". interest is 25%.", 150)
+    state = "play"
+    if debt > DEBT_MAX: game_over("debt")
+
+# ---------------- draw
+
+def _draw():
+  cls(0)
+  if state == "title":
+    draw_title()
+    return
+  draw_play()
+  if state == "tax": draw_tax()
+  elif state == "over": draw_over()
+
+def cprint(s, y, col):
+  print(s, 64 - #s * 2, y, col)
+
+def draw_title():
+  map(0, 0, 0, 8, 16, 14)
+  rectfill(10, 22, 117, 104, 0)
+  rect(10, 22, 117, 104, 1)
+  cprint("soul tax", 30, 12)
+  # the reaper, 4x
+  local bob = flr(math.sin(time() * 2) * 2)
+  sspr(8 + flr(time() * 4) % 2 * 8, 0, 8, 8, 48, 40 + bob, 32, 32)
+  cprint("keep the dead in.", 78, 13)
+  cprint("pay your taxes.", 85, 13)
+  if flr(time() * 2) % 2 == 0: cprint("z to start", 95, 4)
+  if best > 0: cprint("best wave " .. best, 116, 14)
+
+def draw_play():
+  local sx = shake > 0 and flr(rnd(3)) - 1 or 0
+  camera(sx, 0)
+  map(0, 0, 0, 8, 16, 14)
+  draw_towers()
+  draw_ghosts()
+  draw_cursor()
+  camera()
+  draw_fx()
+  draw_hud()
+
+def draw_towers():
+  for key, t in pairs(towers):
+    local T = TYPES[t.type]
+    local r = T.range[t.lv]
+    if t.type == 2:
+      # lantern light: a slow turning ring of dots
+      for i = 0, 11:
+        local a = i / 12 + time() * 0.1
+        pset(t.x + math.cos(a * 6.283) * r, t.y + math.sin(a * 6.283) * r, 4)
+    elif t.type == 3 and t.anim > 0:
+      circ(t.x, t.y, r * (10 - t.anim) / 10, 4)
+    elif t.type == 1 and t.anim > 5:
+      line(t.x, t.y - 2, t.tx, t.ty, 12)
+    spr(8 + t.type, t.x - 4, t.y - 4)
+    for i = 2, t.lv:
+      pset(t.x - 5 + i * 2, t.y - 5, 4)
+
+def draw_ghosts():
+  for _, g in ipairs(ghosts):
+    local f = flr(time() * 4 + g.dist) % 2
+    local bob = flr(math.sin(time() * 3 + g.dist * 0.2) * 1.5)
+    if g.flash > 0:
+      for c = 1, 15: pal(c, 12)
+    elif g.slow > 0:
+      pal(12, 10)
+      pal(14, 9)
+      pal(5, 11)
+    spr(g.k.s + f, g.x - 4, g.y - 4 + bob, 1, 1, g.left)
+    pal()
+    if g.hp < g.max:
+      local w = flr(7 * g.hp / g.max)
+      line(g.x - 4, g.y - 7 + bob, g.x + 3, g.y - 7 + bob, 2)
+      if w >= 0: line(g.x - 4, g.y - 7 + bob, g.x - 4 + w, g.y - 7 + bob, 5)
+
+def draw_cursor():
+  local x, y = cx * 8, cy * 8 + 8
+  local key = cy * 16 + cx
+  local t = towers[key]
+  local col = 5
+  if t:
+    col = 4
+    circ(t.x, t.y, TYPES[t.type].range[t.lv], 13)
+  elif path[key]:
+    col = 9
+  elif blocked[key] or souls < TYPES[sel].cost:
+    col = 2
+  else:
+    circ(x + 4, y + 4, TYPES[sel].range[1], 14)
+  if flr(time() * 4) % 2 == 0: rect(x, y, x + 7, y + 7, col)
+  local bob = flr(math.sin(time() * 3) * 1.5)
+  spr(1 + flr(time() * 3) % 2, x + 5, y - 6 + bob)
+
+def draw_fx():
+  for _, f in ipairs(fx):
+    if f.kind == "soul":
+      circfill(f.x, f.y, 1, 11)
+    else:
+      print(f.s, f.x, f.y, f.col)
+
+def draw_hud():
+  rectfill(0, 0, 127, 7, 0)
+  spr(12, 0, 0)
+  print(souls, 9, 2, 11)
+  spr(13, 28, 0)
+  print(lives, 37, 2, lives <= 3 and 2 or 12)
+  print("wave " .. wave, 50, 2, 13)
+  if debt > 0: print("debt " .. debt, 90, 2, 2)
+
+  rectfill(0, 120, 127, 127, 0)
+  if msg_t > 0:
+    print(msg, 2, 121, 4)
+    return
+  local key = cy * 16 + cx
+  local t = towers[key]
+  if t:
+    local s = "x sell " .. flr(t.spent / 2)
+    if t.lv < 3: s = "z upgrade " .. up_cost(t) .. "  " .. s
+    print(s, 2, 121, 12)
+  elif path[key]:
+    print(waving and "the dead walk..." or "z call wave " .. wave + 1, 2, 121, 9)
+  elif blocked[key]:
+    print("consecrated ground", 2, 121, 14)
+  else:
+    local T = TYPES[sel]
+    spr(8 + sel, 1, 120)
+    print(T.name .. " " .. T.cost, 11, 121, souls >= T.cost and 12 or 2)
+    print("x swap", 102, 121, 14)
+
+def draw_tax():
+  rectfill(6, 10, 121, 117, 12)
+  rect(6, 10, 121, 117, 13)
+  print("celestial revenue", 10, 14, 8)
+  print("service  form 1040-d", 10, 20, 8)
+  rectfill(97, 12, 115, 30, 8)
+  sspr(48, 8, 8, 8, 98, 13, 16, 16)
+  print("wave " .. wave, 10, 28, 14)
+  local y = 38
+  for i, b in ipairs(bill):
+    local col = i == 1 and 6 or 15
+    print(b[1], 10, y, col)
+    print(b[2], 104, y, col)
+    y += i == 1 and 9 or 7
+  line(10, y, 117, y, 14)
+  y += 3
+  print("total due", 10, y, 8)
+  print(total, 104, y, 2)
+  print("souls on hand", 10, y + 7, 8)
+  print(souls, 104, y + 7, souls >= total and 6 or 2)
+  print(verdict or quip, 10, 96, verdict and 3 or 14)
+  if tax_t >= 30:
+    print("z pay", 10, 108, 8)
+    if not disputed: print("x dispute (50/50)", 42, 108, 8)
+
+def draw_over():
+  rectfill(10, 38, 117, 90, 0)
+  rect(10, 38, 117, 90, 2)
+  if reason == "debt":
+    cprint("repossessed", 44, 2)
+    cprint("the crs took your scythe.", 54, 13)
+  else:
+    cprint("purgatory breached", 44, 2)
+    cprint("death is fired.", 54, 13)
+  cprint("survived " .. wave .. " waves", 66, 12)
+  if flr(time() * 2) % 2 == 0: cprint("z to try again", 78, 4)
+__gfx__
+000000000dddddd00dddddd0000000000000000000cccc0000cccc00e000000ee000000e0dddddd0000ee000000ee0000000000000ddd00000111100004444
+00000000d00eee30d00eee30000bb000000bb0000cccccc00cccccc00eeeeee00eeeeee0d000003000e00e000004400000bbb0000d000d0001eeee1004cccc4
+0000000000e2f23000e2f23000bbbb0000bbbb000c8cc8c00c8cc8c0ee2ee2eeee2ee2ee000000300eeeeee0004444000bcbbb000d000d001e1111e14cc44cc4
+0000000000efff3000efff30008bb800008bb8000cccccc00cccccc0eeeeeeeeeeeeeeee000003000e4444e0044443400bbbbb00444444401e1ee1e14c4cc4c4
+000000000eeffc300eeffc3000bbbb0000bbbb000cc11cc00cc11cc0e1eeee1ee1eeee1e000030000e4334e0043444400bbbbb00444144401e1ee1e14c4cc4c4
+000000000efffe300efffe30000bb000000bb0000cccccc00cccccc0eeeeeeeeeeeeeeee00eeee000e4444e04444444400bbb000444144401e1111e14cc44cc4
+00000000effffe30effffe300000b000000b00000cccccc00cccccc00eeeeee00eeeeee00effffe00eeeeee033333333000b00004444444001eeee1004cccc4
+00000000e0e0e0300e0e0e3000000000000000000c0cc0c000c0cc0ce0e00e0e0e0ee0e0eeeeeeee00eeee0000033000000000000000000000111100004444
+ffffffff111111111111111111111111505555055055550500ffff
+fffeffff11181111111ee1111f11f1f1555555555555555500ffff
+ffffffff1111111111edde1111f1ff115cc55cc55cc55cc50ffffff
+ffffffef1111118111edde11111ff1115c2552c55c2552c500cccc
+ffffffff1111111111eeee111111f1115555555555555555008cc8
+feffffff1811111111eeee11111ff111556666555566665500cccc
+ffffffff111111111ffffff111ffff11555555555555555500c8c8
+fffffeff11111811111111111111111150500505050550500ffccff
