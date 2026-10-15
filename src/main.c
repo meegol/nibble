@@ -1,5 +1,6 @@
 #include "api.h"
 #include "cart.h"
+#include "carts_dir.h"
 #include "editor.h"
 #include "gfx.h"
 #include "menu.h"
@@ -17,8 +18,6 @@
 #define ERR_COLS     (SCREEN_W / FONT_W - 1)
 
 enum { MODE_RUN, MODE_EDIT, MODE_MENU };
-
-#define CARTS_DIR "carts"
 
 static char *cart_path;         /* NULL until a cart is opened */
 static SDL_Window *window;
@@ -87,7 +86,7 @@ static void set_mode(int m) {
     mode = m;
     if (m == MODE_EDIT) editor_enter();
     else editor_leave();
-    if (m == MODE_MENU) menu_open(CARTS_DIR);
+    if (m == MODE_MENU) menu_open(carts_dir());
 }
 
 /* Switches to another cart file: runs it, or opens an empty one in the editor if the
@@ -251,6 +250,8 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    /* the app id ties the window to nibble.desktop */
+    SDL_SetAppMetadata("nibble", "0.1", "nibble");
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;

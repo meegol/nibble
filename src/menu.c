@@ -123,7 +123,7 @@ void menu_draw(void) {
         if (i == sel) gfx_rectfill(0, y - 1, SCREEN_W - 1, y + FONT_H - 2, COL_BAR);
         gfx_print(label(i), 3, y, i == sel ? COL_SEL : i == 0 ? COL_NEW : COL_TEXT);
     }
-    if (count == 1) gfx_print("no carts in carts/", 3, TOP + 2 * FONT_H, COL_TEXT);
+    if (count == 1) gfx_print("no carts yet", 3, TOP + 2 * FONT_H, COL_TEXT);
 
     gfx_rectfill(0, SCREEN_H - 7, SCREEN_W - 1, SCREEN_H - 1, COL_BAR);
     gfx_print("enter: open   ctrl+o: menu", 1, SCREEN_H - 6, COL_TEXT);

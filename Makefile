@@ -1,4 +1,5 @@
 CC      ?= cc
+PREFIX  ?= $(HOME)/.local
 LUA_PKG ?= lua5.4
 
 CFLAGS  += -std=c11 -O2 -Wall -Wextra -Ibuild $(shell pkg-config --cflags sdl3 $(LUA_PKG))
@@ -44,7 +45,26 @@ build/shot: tests/shot.c $(EDITOR_OBJ)
 build/gfx_test: tests/gfx_test.c build/gfx.o
 	$(CC) $(CFLAGS) -Isrc -o $@ $^ $(LDLIBS)
 
+# Installs the binary, a launcher entry with icon, and the example carts (copied to
+# ~/.local/share/nibble/carts on first run). Never touches that carts folder.
+install: nibble
+	install -Dm755 nibble $(PREFIX)/bin/nibble
+	install -Dm644 assets/nibble.png $(PREFIX)/share/icons/hicolor/256x256/apps/nibble.png
+	mkdir -p $(PREFIX)/share/applications
+	sed 's|@BIN@|$(PREFIX)/bin/nibble|' assets/nibble.desktop > $(PREFIX)/share/applications/nibble.desktop
+	rm -rf $(PREFIX)/share/nibble/examples
+	mkdir -p $(PREFIX)/share/nibble
+	cp -r carts $(PREFIX)/share/nibble/examples
+	update-desktop-database $(PREFIX)/share/applications 2>/dev/null || true
+	gtk-update-icon-cache -q $(PREFIX)/share/icons/hicolor 2>/dev/null || true
+
+# Leaves your carts in ~/.local/share/nibble/carts alone.
+uninstall:
+	rm -f $(PREFIX)/bin/nibble $(PREFIX)/share/applications/nibble.desktop
+	rm -f $(PREFIX)/share/icons/hicolor/256x256/apps/nibble.png
+	rm -rf $(PREFIX)/share/nibble/examples
+
 clean:
 	rm -rf build nibble
 
-.PHONY: run test clean
+.PHONY: run test install uninstall clean

@@ -14,6 +14,17 @@ make test       # tests (needs lua5.4)
 ./nibble --check path/to/cart.nib   # report syntax errors without running
 ```
 
+### Install
+
+```sh
+make install      # to ~/.local: binary, app launcher entry and icon
+make uninstall
+```
+
+Installed, nibble keeps your carts in `~/.local/share/nibble/carts`; the first launch copies
+the example carts there. Install and uninstall never touch that folder. Run `make install`
+again after pulling changes. `PREFIX=/usr/local` (with sudo) installs system-wide.
+
 `--check` prints `file:line: message` and exits 1 on an error, so it can be used as a linter from another editor.
 
 Without a file, nibble opens a menu of the carts in `carts/` (and its subfolders), with
@@ -203,6 +214,7 @@ The full Lua standard library (`math`, `string`, `table`, …) is also available
 - `tests/` — translator, cart file and drawing tests; `shot.c` renders the editor to a PNG
   from scripted input (`make build/shot`)
 - `carts/` — example carts; `carts/learn/` — lessons
+- `assets/` — icon and launcher entry
 
 ## Roadmap
 

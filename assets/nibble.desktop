@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=nibble
+Comment=Tiny fantasy console: make little games in Lua
+Exec=@BIN@
+Icon=nibble
+Terminal=false
+Categories=Development;Game;
+StartupWMClass=nibble
