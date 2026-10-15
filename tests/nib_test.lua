@@ -134,5 +134,38 @@ do
   t("demo.lua unchanged", src, src)
 end
 
+-- rewriter errors
+e("mixed tabs and spaces", "if a:\n\tx()\n  y()", 3,
+  "inconsistent use of tabs and spaces in indentation")
+e("bad unindent", "if a:\n    x()\n  y()", 3,
+  "unindent does not match any outer indentation level")
+e("missing body", "if a:\ny()", 2, "expected an indented block")
+e("missing body at eof", "if a:", 1, "expected an indented block")
+e("missing body at eof after newline", "def f():\n\n", 1, "expected an indented block")
+e("else without if", "else:\n  x()", 1, "else without if")
+e("elif without if", "elif a:\n  x()", 1, "elif without if")
+e("else after loop", "for i = 1, 2:\n  x()\nelse:\n  y()", 3, "else without if")
+e("unclosed bracket", "x = {1,\n2", 1, "unclosed bracket")
+e("unfinished string", 's = "abc', 1, "unfinished string")
+e("unfinished string line 2", 'x = 1\ns = "abc\ny = 2', 2, "unfinished string")
+e("unfinished long comment", "--[[\nx", 1, "unfinished long comment")
+e("unfinished long string", "s = [[\nx", 1, "unfinished long string")
+t("string continued with backslash", 's = "a\\\nb"', 's = "a\\\nb"')
+
+-- check
+do
+  local l, m = nib.check("x = = 1", "=c")
+  ok("check lua syntax error", l == 1 and m and m:find("unexpected symbol", 1, true),
+     tostring(l) .. ": " .. tostring(m))
+  l, m = nib.check("x = 1\ny = 2\nif a:\n  x(\n", "=c")
+  ok("check unclosed call", l == 4 and m == "unclosed bracket", tostring(l) .. ": " .. tostring(m))
+  l, m = nib.check("def f():\n  return 1\n  x = 2", "=c")
+  ok("check lua error on right line", l == 3, tostring(l) .. ": " .. tostring(m))
+  ok("check clean", nib.check("def f():\n  return 1", "=c") == nil)
+  l, m = nib.check("if a:\ny()", "=c")
+  ok("check passes translate errors", l == 2 and m == "expected an indented block",
+     tostring(l) .. ": " .. tostring(m))
+end
+
 print(("ok %d, failed %d"):format(passed, failed))
 os.exit(failed == 0 and 0 or 1)
