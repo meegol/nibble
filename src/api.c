@@ -1,4 +1,5 @@
 #include "api.h"
+#include "cart.h"
 #include "gfx.h"
 #include "nib_lua.h"
 
@@ -116,6 +117,88 @@ static int l_pal(lua_State *L) {
     return 0;
 }
 
+static int l_palt(lua_State *L) {
+    if (lua_isnoneornil(L, 1)) {
+        for (int i = 0; i < NUM_COLORS; i++) gfx_palt(i, i == 0);
+    } else {
+        gfx_palt(argi(L, 1), lua_toboolean(L, 2));
+    }
+    return 0;
+}
+
+/* ---- sprites & map ---- */
+
+/* spr(n, x, y, [w, h], [flip_x], [flip_y]) -- w, h in sprites */
+static int l_spr(lua_State *L) {
+    int n = argi(L, 1) & 255;
+    int w = (int)(luaL_optnumber(L, 4, 1) * SPRITE_SIZE);
+    int h = (int)(luaL_optnumber(L, 5, 1) * SPRITE_SIZE);
+    gfx_sspr(n % 16 * SPRITE_SIZE, n / 16 * SPRITE_SIZE, w, h, argi(L, 2), argi(L, 3), w, h,
+             lua_toboolean(L, 6), lua_toboolean(L, 7));
+    return 0;
+}
+
+/* sspr(sx, sy, sw, sh, dx, dy, [dw, dh], [flip_x], [flip_y]) */
+static int l_sspr(lua_State *L) {
+    int sw = argi(L, 3), sh = argi(L, 4);
+    gfx_sspr(argi(L, 1), argi(L, 2), sw, sh, argi(L, 5), argi(L, 6),
+             opti(L, 7, sw), opti(L, 8, sh), lua_toboolean(L, 9), lua_toboolean(L, 10));
+    return 0;
+}
+
+static int l_sget(lua_State *L) {
+    int x = argi(L, 1), y = argi(L, 2);
+    bool in = x >= 0 && y >= 0 && x < SHEET_W && y < SHEET_H;
+    lua_pushinteger(L, in ? gfx_sheet[y * SHEET_W + x] : 0);
+    return 1;
+}
+
+static int l_sset(lua_State *L) {
+    int x = argi(L, 1), y = argi(L, 2), c = optcol(L, 3);
+    if (x >= 0 && y >= 0 && x < SHEET_W && y < SHEET_H) gfx_sheet[y * SHEET_W + x] = c;
+    return 0;
+}
+
+/* fget(n, [f]) -- whole byte, or flag f as a boolean */
+static int l_fget(lua_State *L) {
+    int flags = gfx_flags[argi(L, 1) & 255];
+    if (lua_isnoneornil(L, 2)) lua_pushinteger(L, flags);
+    else lua_pushboolean(L, (flags >> (argi(L, 2) & 7)) & 1);
+    return 1;
+}
+
+/* fset(n, [f], v) -- whole byte, or flag f from a boolean */
+static int l_fset(lua_State *L) {
+    uint8_t *flags = &gfx_flags[argi(L, 1) & 255];
+    if (lua_gettop(L) < 3) {
+        *flags = argi(L, 2) & 255;
+    } else {
+        int bit = 1 << (argi(L, 2) & 7);
+        *flags = lua_toboolean(L, 3) ? *flags | bit : *flags & ~bit;
+    }
+    return 0;
+}
+
+/* map([cx, cy, sx, sy, cw, ch, layer]) */
+static int l_map(lua_State *L) {
+    gfx_map_draw(opti(L, 1, 0), opti(L, 2, 0), opti(L, 3, 0), opti(L, 4, 0),
+                 opti(L, 5, MAP_W), opti(L, 6, MAP_H), opti(L, 7, 0));
+    return 0;
+}
+
+static int l_mget(lua_State *L) {
+    int x = argi(L, 1), y = argi(L, 2);
+    bool in = x >= 0 && y >= 0 && x < MAP_W && y < MAP_H;
+    lua_pushinteger(L, in ? gfx_map[y * MAP_W + x] : 0);
+    return 1;
+}
+
+static int l_mset(lua_State *L) {
+    int x = argi(L, 1), y = argi(L, 2);
+    if (x >= 0 && y >= 0 && x < MAP_W && y < MAP_H) gfx_map[y * MAP_W + x] = argi(L, 3) & 255;
+    return 0;
+}
+
 /* ---- input ---- */
 
 static int l_btn(lua_State *L) {
@@ -179,7 +262,10 @@ static const luaL_Reg API[] = {
     {"color", l_color},   {"camera", l_camera},     {"pal", l_pal},
     {"btn", l_btn},       {"btnp", l_btnp},         {"rnd", l_rnd},
     {"flr", l_flr},       {"mid", l_mid},           {"time", l_time},
-    {"printh", l_printh}, {NULL, NULL},
+    {"printh", l_printh}, {"palt", l_palt},         {"spr", l_spr},
+    {"sspr", l_sspr},     {"sget", l_sget},         {"sset", l_sset},
+    {"fget", l_fget},     {"fset", l_fset},         {"map", l_map},
+    {"mget", l_mget},     {"mset", l_mset},         {NULL, NULL},
 };
 
 /* ---- cart lifecycle ---- */
@@ -195,91 +281,59 @@ static void copy_error(lua_State *L, char *err, size_t errlen) {
     snprintf(err, errlen, "%s", msg ? msg : "unknown error");
 }
 
-/* ---- nibble flavour (.nib) ---- */
+/* ---- loading ---- */
 
 static bool is_nib(const char *path) {
     size_t n = strlen(path);
     return n >= 4 && strcmp(path + n - 4, ".nib") == 0;
 }
 
-/* Reads a whole file into a malloc'd buffer. */
-static char *read_file(const char *path, size_t *len) {
-    FILE *f = fopen(path, "rb");
-    if (!f) return NULL;
-    char *buf = NULL;
-    size_t cap = 0, n = 0;
-    for (;;) {
-        if (n == cap) {
-            char *grown = realloc(buf, cap = cap ? cap * 2 : 4096);
-            if (!grown) { free(buf); fclose(f); return NULL; }
-            buf = grown;
-        }
-        size_t got = fread(buf + n, 1, cap - n, f);
-        n += got;
-        if (got == 0) break;
-    }
-    fclose(f);
-    *len = n;
-    return buf;
-}
-
-/* Calls nib.<fn>(file contents, chunkname) and leaves its results on the stack.
-   Returns the number of results, or -1 with err filled. */
-static int call_nib(lua_State *L, const char *fn, const char *path, char *err, size_t errlen) {
-    size_t len;
-    char *src = read_file(path, &len);
-    if (!src) {
-        snprintf(err, errlen, "cannot open %s", path);
-        return -1;
-    }
+/* Runs nib.translate on the code at the top of the stack, replacing it with the Lua
+   source. On a translate error fills err with "path:line: message". */
+static bool translate_nib(lua_State *L, const char *path, char *err, size_t errlen) {
     int top = lua_gettop(L);
     if (luaL_loadbuffer(L, NIB_LUA, sizeof NIB_LUA - 1, "=nib") != LUA_OK
         || lua_pcall(L, 0, 1, 0) != LUA_OK) {
-        free(src);
         copy_error(L, err, errlen);
-        lua_settop(L, top);
-        return -1;
-    }
-    lua_getfield(L, -1, fn);
-    lua_remove(L, -2);
-    lua_pushlstring(L, src, len);
-    free(src);
-    lua_pushfstring(L, "@%s", path);
-    if (lua_pcall(L, 2, LUA_MULTRET, 0) != LUA_OK) {
-        copy_error(L, err, errlen);
-        lua_settop(L, top);
-        return -1;
-    }
-    return lua_gettop(L) - top;
-}
-
-/* Formats a (line, msg) pair left on the stack by nib as "path:line: msg". */
-static void nib_error(lua_State *L, int line_idx, const char *path, char *err, size_t errlen) {
-    snprintf(err, errlen, "%s:%d: %s", path, (int)lua_tointeger(L, line_idx),
-             lua_tostring(L, line_idx + 1));
-}
-
-/* Pushes the compiled chunk for a .nib cart. */
-static bool load_nib(lua_State *L, const char *path, char *err, size_t errlen) {
-    int top = lua_gettop(L);
-    if (call_nib(L, "translate", path, err, errlen) < 0) return false;
-    if (lua_isnil(L, top + 1)) {
-        nib_error(L, top + 2, path, err, errlen);
-        lua_settop(L, top);
+        lua_settop(L, top - 1);
         return false;
     }
-    size_t len;
-    const char *lua_src = lua_tolstring(L, top + 1, &len);
-    char chunkname[512];
-    snprintf(chunkname, sizeof chunkname, "@%s", path);
-    if (luaL_loadbuffer(L, lua_src, len, chunkname) != LUA_OK) {
+    lua_getfield(L, -1, "translate");
+    lua_pushvalue(L, top);
+    if (lua_pcall(L, 1, 3, 0) != LUA_OK) {
         copy_error(L, err, errlen);
-        lua_settop(L, top);
+        lua_settop(L, top - 1);
         return false;
     }
-    lua_replace(L, top + 1);
-    lua_settop(L, top + 1);
+    if (lua_isnil(L, -3)) {
+        snprintf(err, errlen, "%s:%d: %s", path, (int)lua_tointeger(L, -2), lua_tostring(L, -1));
+        lua_settop(L, top - 1);
+        return false;
+    }
+    lua_pop(L, 2);
+    lua_replace(L, top);
+    lua_settop(L, top);
     return true;
+}
+
+/* Reads the cart (filling sprite memory) and pushes its compiled code. */
+static bool load_code(lua_State *L, const char *path, char *err, size_t errlen) {
+    size_t len;
+    char *code = cart_read(path, &len, err, errlen);
+    if (!code) return false;
+    lua_pushlstring(L, code, len);
+    free(code);
+    if (is_nib(path) && !translate_nib(L, path, err, errlen)) return false;
+
+    size_t lua_len;
+    const char *lua_src = lua_tolstring(L, -1, &lua_len);
+    lua_pushfstring(L, "@%s", path);
+    int status = luaL_loadbuffer(L, lua_src, lua_len, lua_tostring(L, -1));
+    if (status != LUA_OK) copy_error(L, err, errlen);
+    lua_replace(L, -3);
+    lua_pop(L, 1);
+    if (status != LUA_OK) lua_pop(L, 1);
+    return status == LUA_OK;
 }
 
 bool api_check(const char *path, char *err, size_t errlen) {
@@ -289,15 +343,7 @@ bool api_check(const char *path, char *err, size_t errlen) {
         return false;
     }
     luaL_openlibs(L);
-    bool ok;
-    if (is_nib(path)) {
-        int n = call_nib(L, "check", path, err, errlen);
-        ok = n == 0 || (n > 0 && lua_isnil(L, 1));
-        if (n > 0 && !ok) nib_error(L, 1, path, err, errlen);
-    } else {
-        ok = luaL_loadfile(L, path) == LUA_OK;
-        if (!ok) copy_error(L, err, errlen);
-    }
+    bool ok = load_code(L, path, err, errlen);
     lua_close(L);
     return ok;
 }
@@ -312,18 +358,8 @@ lua_State *api_load(const char *path, char *err, size_t errlen) {
     for (const luaL_Reg *r = API; r->name; r++) lua_register(L, r->name, r->func);
 
     lua_pushcfunction(L, traceback);
-    if (is_nib(path)) {
-        if (!load_nib(L, path, err, errlen)) {
-            lua_close(L);
-            return NULL;
-        }
-    } else if (luaL_loadfile(L, path) != LUA_OK) {
-        copy_error(L, err, errlen);
-        lua_close(L);
-        return NULL;
-    }
-    if (lua_pcall(L, 0, 0, -2) != LUA_OK) {
-        copy_error(L, err, errlen);
+    if (!load_code(L, path, err, errlen) || lua_pcall(L, 0, 0, -2) != LUA_OK) {
+        if (lua_gettop(L) > 1) copy_error(L, err, errlen);
         lua_close(L);
         return NULL;
     }

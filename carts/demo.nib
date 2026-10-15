@@ -36,7 +36,7 @@ def _draw():
 
   for _, b in ipairs(balls): circfill(b.x, b.y, b.r, b.c)
 
-  circfill(px, py, 4, 4)
+  spr(1, px - 4, py - 4)
   circ(px, py, 6 + flr(time() * 4) % 2, 3)
 
   # header: title + palette strip
@@ -45,3 +45,12 @@ def _draw():
 
   rect(0, 15, 127, 113, 14)
   print("arrows: move   z: recolor", 14, 118, 13)
+__gfx__
+0000000000444400
+0000000004444440
+0000000044f44f44
+0000000044444444
+0000000042444424
+0000000044222444
+0000000004444440
+0000000000400400

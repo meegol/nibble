@@ -27,8 +27,16 @@ build:
 run: nibble
 	./nibble carts/demo.nib
 
-test:
+test: build/cart_test build/gfx_test
 	lua5.4 tests/nib_test.lua
+	build/cart_test
+	build/gfx_test
+
+build/cart_test: tests/cart_test.c build/cart.o build/gfx.o
+	$(CC) $(CFLAGS) -Isrc -o $@ $^ $(LDLIBS)
+
+build/gfx_test: tests/gfx_test.c build/gfx.o
+	$(CC) $(CFLAGS) -Isrc -o $@ $^ $(LDLIBS)
 
 clean:
 	rm -rf build nibble

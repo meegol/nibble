@@ -8,7 +8,7 @@ Written in C with SDL3 and Lua 5.4.
 ```sh
 make            # needs sdl3 and lua5.4 (Arch: pacman -S sdl3 lua54)
 make run        # runs carts/demo.nib
-make test       # translator tests (needs lua5.4)
+make test       # tests (needs lua5.4)
 ./nibble path/to/cart.nib
 ./nibble --check path/to/cart.nib   # report syntax errors without running
 ```
@@ -39,6 +39,26 @@ def _draw():      # after updates, once per rendered frame
     cls()
     circfill(x, 64, 4, 9)
 ```
+
+## Sprites and map
+
+The sprite sheet is 128×128 pixels: 256 sprites of 8×8, numbered left to right, top to
+bottom (sprite 1 is at x 8, y 0). Each sprite has 8 flags. The map is 128×64 cells, each
+holding a sprite number. Color 0 is transparent when drawing sprites.
+
+They're stored at the end of the cart file, after the code:
+
+```
+...code...
+__gfx__
+0000000000444400      one hex digit per pixel, up to 128 rows of 128
+__gff__
+0001                  two hex digits per sprite, 2 rows of 128 sprites
+__map__
+0102                  two hex digits per cell, up to 64 rows of 128
+```
+
+Missing rows and digits are 0. Changes made with `sset`, `fset` and `mset` last until the cart reloads.
 
 ## nibble flavour
 
@@ -86,7 +106,14 @@ Coordinates are pixels, and fractions are floored. Wherever `col` is optional, p
 | `print(s, [x, y], [col])` | text (4×6 font); without x,y it prints at the cursor |
 | `color(col)` | set draw color |
 | `camera([x, y])` | offset all drawing |
-| `pal(a, b)` / `pal()` | draw color `a` as `b` / reset |
+| `pal(a, b)` / `pal()` | draw color `a` as `b` / reset (also resets `palt`) |
+| `palt(col, t)` / `palt()` | sprite color `col` transparent or not / only 0 transparent |
+| `spr(n, x, y, [w, h], [fx], [fy])` | draw sprite `n` (`w`×`h` sprites, optional flips) |
+| `sspr(sx, sy, sw, sh, dx, dy, [dw, dh], [fx], [fy])` | draw a sheet rectangle, stretched |
+| `sget(x, y)` / `sset(x, y, [col])` | get / set a sprite sheet pixel |
+| `fget(n, [f])` / `fset(n, [f], v)` | sprite flags: whole byte, or flag `f` (0–7) |
+| `map([cx, cy, sx, sy, cw, ch, layer])` | draw map cells at screen `sx, sy`; skips cell 0, and with `layer` sprites without those flags |
+| `mget(x, y)` / `mset(x, y, n)` | get / set a map cell |
 | `btn([i])` | is button i held (no arg: bitmask) |
 | `btnp(i)` | was button i just pressed (repeats while held) |
 | `rnd([x])` | random float in [0, x), default x = 1 |
@@ -106,8 +133,9 @@ The full Lua standard library (`math`, `string`, `table`, …) is also available
 - `src/main.c` — window, fixed 60 fps loop, input, hot reload, error screen
 - `src/gfx.c` — indexed framebuffer, drawing primitives, built-in font
 - `src/api.c` — Lua bindings and cart lifecycle
+- `src/cart.c` — cart file: code plus sprite, flag and map data
 - `src/nib.lua` — nibble flavour translator, embedded in the binary at build time
-- `tests/` — translator tests
+- `tests/` — translator, cart file and drawing tests
 - `carts/` — example carts
 
 ## Roadmap
@@ -115,7 +143,7 @@ The full Lua standard library (`math`, `string`, `table`, …) is also available
 1. ~~Pixels on screen~~
 2. ~~Lua hookup~~
 3. ~~Drawing API + font~~
-4. Sprites & map: `spr`, `sspr`, `map`, `mget`, `mset`, sprite flags
+4. ~~Sprites & map: `spr`, `sspr`, `map`, `mget`, `mset`, sprite flags~~
 5. Audio: synth + `sfx`, `music`
 6. Cartridge format (code + gfx + map + sfx in one file)
 7. Built-in editors (sprite, map, sfx, code)

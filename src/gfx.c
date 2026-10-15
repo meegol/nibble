@@ -84,8 +84,13 @@ static const char *FONT[96] = {
     ['~' - 32] = ".....#####.....",
 };
 
+uint8_t gfx_sheet[SHEET_W * SHEET_H];
+uint8_t gfx_flags[NUM_SPRITES];
+uint8_t gfx_map[MAP_W * MAP_H];
+
 static uint8_t screen[SCREEN_W * SCREEN_H];
 static uint8_t draw_pal[NUM_COLORS];
+static bool transparent[NUM_COLORS];
 static int cam_x, cam_y;
 
 void gfx_reset(void) {
@@ -185,6 +190,37 @@ int gfx_print(const char *s, int x, int y, int col) {
     return y + FONT_H;
 }
 
+void gfx_sspr(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh,
+              bool flip_x, bool flip_y) {
+    if (sw <= 0 || sh <= 0) return;
+    for (int y = 0; y < dh; y++) {
+        int ty = y * sh / dh;
+        int py = sy + (flip_y ? sh - 1 - ty : ty);
+        if (py < 0 || py >= SHEET_H) continue;
+        for (int x = 0; x < dw; x++) {
+            int tx = x * sw / dw;
+            int px = sx + (flip_x ? sw - 1 - tx : tx);
+            if (px < 0 || px >= SHEET_W) continue;
+            int c = gfx_sheet[py * SHEET_W + px];
+            if (!transparent[c]) gfx_pset(dx + x, dy + y, c);
+        }
+    }
+}
+
+void gfx_map_draw(int cx, int cy, int sx, int sy, int cw, int ch, int layer) {
+    for (int y = 0; y < ch; y++) {
+        for (int x = 0; x < cw; x++) {
+            int mx = cx + x, my = cy + y;
+            if (mx < 0 || my < 0 || mx >= MAP_W || my >= MAP_H) continue;
+            int n = gfx_map[my * MAP_W + mx];
+            if (n == 0 || (layer && !(gfx_flags[n] & layer))) continue;
+            gfx_sspr(n % 16 * SPRITE_SIZE, n / 16 * SPRITE_SIZE, SPRITE_SIZE, SPRITE_SIZE,
+                     sx + x * SPRITE_SIZE, sy + y * SPRITE_SIZE, SPRITE_SIZE, SPRITE_SIZE,
+                     false, false);
+        }
+    }
+}
+
 void gfx_camera(int x, int y) {
     cam_x = x;
     cam_y = y;
@@ -195,7 +231,14 @@ void gfx_pal(int from, int to) {
 }
 
 void gfx_pal_reset(void) {
-    for (int i = 0; i < NUM_COLORS; i++) draw_pal[i] = i;
+    for (int i = 0; i < NUM_COLORS; i++) {
+        draw_pal[i] = i;
+        transparent[i] = i == 0;
+    }
+}
+
+void gfx_palt(int col, bool t) {
+    transparent[col & 15] = t;
 }
 
 void gfx_to_rgb(uint32_t *out) {
