@@ -52,6 +52,16 @@ void gfx_pal_reset(void);
 void gfx_pal(int from, int to);
 void gfx_palt(int col, bool transparent);
 
+/* Camera, draw palette and transparency, saved while an editor draws over a paused game. */
+typedef struct {
+    int cam_x, cam_y;
+    uint8_t pal[NUM_COLORS];
+    bool transparent[NUM_COLORS];
+} GfxState;
+
+void gfx_get_state(GfxState *s);
+void gfx_set_state(const GfxState *s);
+
 /* Converts the indexed framebuffer to XRGB8888 pixels. */
 void gfx_to_rgb(uint32_t *out);
 

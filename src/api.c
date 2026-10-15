@@ -1,5 +1,4 @@
 #include "api.h"
-#include "cart.h"
 #include "gfx.h"
 #include "nib_lua.h"
 
@@ -316,13 +315,10 @@ static bool translate_nib(lua_State *L, const char *path, char *err, size_t errl
     return true;
 }
 
-/* Reads the cart (filling sprite memory) and pushes its compiled code. */
-static bool load_code(lua_State *L, const char *path, char *err, size_t errlen) {
-    size_t len;
-    char *code = cart_read(path, &len, err, errlen);
-    if (!code) return false;
+/* Pushes the compiled code; path names the chunk and picks .nib translation. */
+static bool load_code(lua_State *L, const char *path, const char *code, size_t len,
+                      char *err, size_t errlen) {
     lua_pushlstring(L, code, len);
-    free(code);
     if (is_nib(path) && !translate_nib(L, path, err, errlen)) return false;
 
     size_t lua_len;
@@ -336,19 +332,19 @@ static bool load_code(lua_State *L, const char *path, char *err, size_t errlen) 
     return status == LUA_OK;
 }
 
-bool api_check(const char *path, char *err, size_t errlen) {
+bool api_check(const char *path, const char *code, size_t len, char *err, size_t errlen) {
     lua_State *L = luaL_newstate();
     if (!L) {
         snprintf(err, errlen, "out of memory");
         return false;
     }
     luaL_openlibs(L);
-    bool ok = load_code(L, path, err, errlen);
+    bool ok = load_code(L, path, code, len, err, errlen);
     lua_close(L);
     return ok;
 }
 
-lua_State *api_load(const char *path, char *err, size_t errlen) {
+lua_State *api_load(const char *path, const char *code, size_t len, char *err, size_t errlen) {
     lua_State *L = luaL_newstate();
     if (!L) {
         snprintf(err, errlen, "out of memory");
@@ -358,7 +354,7 @@ lua_State *api_load(const char *path, char *err, size_t errlen) {
     for (const luaL_Reg *r = API; r->name; r++) lua_register(L, r->name, r->func);
 
     lua_pushcfunction(L, traceback);
-    if (!load_code(L, path, err, errlen) || lua_pcall(L, 0, 0, -2) != LUA_OK) {
+    if (!load_code(L, path, code, len, err, errlen) || lua_pcall(L, 0, 0, -2) != LUA_OK) {
         if (lua_gettop(L) > 1) copy_error(L, err, errlen);
         lua_close(L);
         return NULL;

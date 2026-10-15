@@ -28,17 +28,12 @@ static char *slurp(void) {
     return buf;
 }
 
-/* Reads TMP, returns the code part (static) or NULL with err set. */
+/* Reads TMP into cart, returns its code or NULL with err set. */
 static char err[256];
+static Cart cart;
 static const char *read_code(void) {
-    static char code[1 << 16];
-    size_t len;
-    char *c = cart_read(TMP, &len, err, sizeof err);
-    if (!c) return NULL;
-    memcpy(code, c, len);
-    code[len] = '\0';
-    free(c);
-    return code;
+    if (!cart_read(TMP, &cart, err, sizeof err)) return NULL;
+    return cart.code;
 }
 
 static void expect_error(const char *file, const char *msg) {
@@ -57,50 +52,52 @@ int main(void) {
     const char *code;
 
     /* no sections */
+    put("x = 1\n__gfx__\n5\n");
+    read_code();
     put("x = 1\ny = 2\n");
-    gfx_sheet[0] = 5;
     code = read_code();
     CHECK(code && strcmp(code, "x = 1\ny = 2\n") == 0);
-    CHECK(gfx_sheet[0] == 0);
+    CHECK(cart.sheet[0] == 0);
 
     /* sections */
     put("x = 1\n__gfx__\n0123\n\nf\n__gff__\n0001ff\n__map__\n0a\n00000b\n");
     code = read_code();
     CHECK(code && strcmp(code, "x = 1\n") == 0);
-    CHECK(gfx_sheet[0] == 0 && gfx_sheet[1] == 1 && gfx_sheet[2] == 2 && gfx_sheet[3] == 3);
-    CHECK(gfx_sheet[4] == 0);
-    CHECK(gfx_sheet[1 * SHEET_W] == 0);
-    CHECK(gfx_sheet[2 * SHEET_W] == 15);
-    CHECK(gfx_flags[0] == 0 && gfx_flags[1] == 1 && gfx_flags[2] == 255);
-    CHECK(gfx_map[0] == 10);
-    CHECK(gfx_map[MAP_W + 2] == 11);
+    CHECK(cart.sheet[0] == 0 && cart.sheet[1] == 1 && cart.sheet[2] == 2 && cart.sheet[3] == 3);
+    CHECK(cart.sheet[4] == 0);
+    CHECK(cart.sheet[1 * SHEET_W] == 0);
+    CHECK(cart.sheet[2 * SHEET_W] == 15);
+    CHECK(cart.flags[0] == 0 && cart.flags[1] == 1 && cart.flags[2] == 255);
+    CHECK(cart.map[0] == 10);
+    CHECK(cart.map[MAP_W + 2] == 11);
 
     /* second gff line is sprites 128..255 */
     put("__gff__\n00\n07\n");
     code = read_code();
     CHECK(code && strcmp(code, "") == 0);
-    CHECK(gfx_flags[128] == 7);
+    CHECK(cart.flags[128] == 7);
 
     /* CRLF */
     put("x = 1\r\n__gfx__\r\n7\r\n");
     code = read_code();
     CHECK(code && strcmp(code, "x = 1\r\n") == 0);
-    CHECK(gfx_sheet[0] == 7);
+    CHECK(cart.sheet[0] == 7);
 
     /* write then read round trip */
-    memset(gfx_sheet, 0, sizeof gfx_sheet);
-    memset(gfx_flags, 0, sizeof gfx_flags);
-    memset(gfx_map, 0, sizeof gfx_map);
-    gfx_sheet[5] = 9;
-    gfx_sheet[10 * SHEET_W + 127] = 15;
-    gfx_flags[200] = 0x81;
-    gfx_map[63 * MAP_W + 127] = 0xfe;
-    CHECK(cart_write(TMP, "def f():\n  x()", 14, err, sizeof err));
+    memset(cart.sheet, 0, sizeof cart.sheet);
+    memset(cart.flags, 0, sizeof cart.flags);
+    memset(cart.map, 0, sizeof cart.map);
+    cart.sheet[5] = 9;
+    cart.sheet[10 * SHEET_W + 127] = 15;
+    cart.flags[200] = 0x81;
+    cart.map[63 * MAP_W + 127] = 0xfe;
+    cart_set_code(&cart, "def f():\n  x()", 14);
+    CHECK(cart_write(TMP, &cart, err, sizeof err));
     code = read_code();
     CHECK(code && strcmp(code, "def f():\n  x()\n") == 0);
-    CHECK(gfx_sheet[5] == 9 && gfx_sheet[10 * SHEET_W + 127] == 15);
-    CHECK(gfx_flags[200] == 0x81);
-    CHECK(gfx_map[63 * MAP_W + 127] == 0xfe);
+    CHECK(cart.sheet[5] == 9 && cart.sheet[10 * SHEET_W + 127] == 15);
+    CHECK(cart.flags[200] == 0x81);
+    CHECK(cart.map[63 * MAP_W + 127] == 0xfe);
     {
         /* trailing zero rows are omitted: gfx has 11 rows */
         const char *s = slurp();
@@ -111,10 +108,11 @@ int main(void) {
     }
 
     /* all-zero memory writes no sections */
-    memset(gfx_sheet, 0, sizeof gfx_sheet);
-    memset(gfx_flags, 0, sizeof gfx_flags);
-    memset(gfx_map, 0, sizeof gfx_map);
-    CHECK(cart_write(TMP, "x = 1\n", 6, err, sizeof err));
+    memset(cart.sheet, 0, sizeof cart.sheet);
+    memset(cart.flags, 0, sizeof cart.flags);
+    memset(cart.map, 0, sizeof cart.map);
+    cart_set_code(&cart, "x = 1\n", 6);
+    CHECK(cart_write(TMP, &cart, err, sizeof err));
     CHECK(strcmp(slurp(), "x = 1\n") == 0);
 
     /* errors */
@@ -129,6 +127,21 @@ int main(void) {
     put("x\n");
     remove(TMP);
     CHECK(read_code() == NULL);
+
+    /* a failed read leaves the cart unchanged */
+    put("y = 2\n__gfx__\n5\n");
+    read_code();
+    expect_error("z\n__gfx__\nq\n", "3: bad hex digit in __gfx__");
+    CHECK(strcmp(cart.code, "y = 2\n") == 0 && cart.sheet[0] == 5);
+
+    /* version survives a read; cart_to_gfx copies data */
+    cart.version = 7;
+    put("w\n__gfx__\n6\n");
+    read_code();
+    CHECK(cart.version == 7);
+    cart_to_gfx(&cart);
+    CHECK(gfx_sheet[0] == 6);
+    cart_free(&cart);
 
     printf("ok %d, failed %d\n", passed, failed);
     return failed ? 1 : 0;

@@ -241,6 +241,20 @@ void gfx_palt(int col, bool t) {
     transparent[col & 15] = t;
 }
 
+void gfx_get_state(GfxState *s) {
+    s->cam_x = cam_x;
+    s->cam_y = cam_y;
+    memcpy(s->pal, draw_pal, sizeof draw_pal);
+    memcpy(s->transparent, transparent, sizeof transparent);
+}
+
+void gfx_set_state(const GfxState *s) {
+    cam_x = s->cam_x;
+    cam_y = s->cam_y;
+    memcpy(draw_pal, s->pal, sizeof draw_pal);
+    memcpy(transparent, s->transparent, sizeof transparent);
+}
+
 void gfx_to_rgb(uint32_t *out) {
     for (int i = 0; i < SCREEN_W * SCREEN_H; i++) out[i] = PALETTE[screen[i]];
 }

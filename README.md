@@ -15,16 +15,23 @@ make test       # tests (needs lua5.4)
 
 `--check` prints `file:line: message` and exits 1 on an error, so it can be used as a linter from another editor.
 
-Saving the cart file reloads it automatically. Lua errors show on screen.
+Esc switches between the game and the editor. Saving the cart file from another editor
+reloads it automatically, unless there are unsaved changes in nibble. Lua errors show on
+screen; Esc from there opens the code at the error line. A cart file that doesn't exist yet
+opens as a new, empty cart.
 
 | Key | Action |
 |---|---|
 | Arrows / WASD | buttons 0–3 (left, right, up, down) |
 | Z / C / N | button 4 (O) |
 | X / V / M | button 5 (X) |
-| Ctrl+R | reload cart |
+| Esc | game → editor; editor → game (restarts if anything was edited) |
+| Ctrl+R | run from the start |
+| Ctrl+S | save |
+| Ctrl+Tab | next editor tab |
 | F11 | fullscreen |
-| Esc | quit |
+
+Closing the window with unsaved changes asks once; close again to discard them.
 
 ## Writing a cart
 
@@ -130,12 +137,15 @@ The full Lua standard library (`math`, `string`, `table`, …) is also available
 
 ## Layout
 
-- `src/main.c` — window, fixed 60 fps loop, input, hot reload, error screen
+- `src/main.c` — window, fixed 60 fps loop, run/edit modes, hot reload, error screen
+- `src/editor.c` — editor shell: tabs, top and status bars, input routing
+- `src/code_edit.c`, `src/sprite_edit.c` — the editors
 - `src/gfx.c` — indexed framebuffer, drawing primitives, built-in font
 - `src/api.c` — Lua bindings and cart lifecycle
 - `src/cart.c` — cart file: code plus sprite, flag and map data
 - `src/nib.lua` — nibble flavour translator, embedded in the binary at build time
-- `tests/` — translator, cart file and drawing tests
+- `tests/` — translator, cart file and drawing tests; `shot.c` renders the editor to a PNG
+  from scripted input (`make build/shot`)
 - `carts/` — example carts
 
 ## Roadmap

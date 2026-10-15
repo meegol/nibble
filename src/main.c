@@ -1,4 +1,6 @@
 #include "api.h"
+#include "cart.h"
+#include "editor.h"
 #include "gfx.h"
 
 #include <SDL3/SDL.h>
@@ -13,7 +15,13 @@
 #define MAX_CATCHUP  4
 #define ERR_COLS     (SCREEN_W / FONT_W - 1)
 
+enum { MODE_RUN, MODE_EDIT };
+
 static const char *cart_path;
+static Cart cart;
+static unsigned saved_version;  /* cart.version when last read or written */
+static unsigned run_version;    /* cart.version the running game started from */
+static int mode;
 static lua_State *L;
 static bool failed;
 static char err[4096];
@@ -29,15 +37,60 @@ static void fail(void) {
     fprintf(stderr, "%s\n", err);
 }
 
-static void cart_load(void) {
+static bool unsaved(void) {
+    return cart.version != saved_version;
+}
+
+/* Starts the game from the cart in memory. */
+static void run(void) {
     if (L) lua_close(L);
+    L = NULL;
     gfx_reset();
     api_reset();
+    cart_to_gfx(&cart);
     failed = false;
-    cart_mtime = file_mtime(cart_path);
+    run_version = cart.version;
 
-    L = api_load(cart_path, err, sizeof err);
+    L = api_load(cart_path, cart.code, cart.code_len, err, sizeof err);
     if (!L || !api_call(L, "_init", err, sizeof err)) fail();
+}
+
+/* Reads the cart from disk. Returns false (with the error shown) on a bad file. */
+static bool load_file(void) {
+    cart_mtime = file_mtime(cart_path);
+    if (!cart_read(cart_path, &cart, err, sizeof err)) {
+        fail();
+        return false;
+    }
+    cart.version++;
+    saved_version = cart.version;
+    editor_cart_changed();
+    return true;
+}
+
+static void save(void) {
+    char msg[256];
+    if (cart_write(cart_path, &cart, msg, sizeof msg)) {
+        saved_version = cart.version;
+        cart_mtime = file_mtime(cart_path);
+        editor_status("saved");
+    } else {
+        editor_status("%s", msg);
+    }
+}
+
+static void set_mode(int m) {
+    mode = m;
+    if (m == MODE_EDIT) editor_enter();
+    else editor_leave();
+}
+
+/* Line number of the first "path:LINE:" in the error, or 0. */
+static int error_line(void) {
+    size_t n = strlen(cart_path);
+    for (const char *p = strstr(err, cart_path); p; p = strstr(p + 1, cart_path))
+        if (p[n] == ':' && p[n + 1] >= '0' && p[n + 1] <= '9') return atoi(p + n + 1);
+    return 0;
 }
 
 /* Shows the error message hard-wrapped to the screen width. */
@@ -59,7 +112,7 @@ static void draw_error(void) {
 
     gfx_reset();
     gfx_cls(0);
-    gfx_print("ERROR - SAVE OR CTRL+R TO RELOAD", 0, 0, 2);
+    gfx_print("ERROR - ESC: EDIT  CTRL+R: RUN", 0, 0, 2);
     gfx_print(wrapped, 0, FONT_H * 2, 12);
 }
 
@@ -76,9 +129,59 @@ static uint8_t read_buttons(void) {
     return b;
 }
 
+/* Handles one event. Returns false to quit. */
+static bool handle_event(SDL_Renderer *ren, SDL_Window *win, SDL_Event *ev, bool *quit_warned) {
+    if (ev->type == SDL_EVENT_QUIT) {
+        if (!unsaved() || *quit_warned) return false;
+        *quit_warned = true;
+        set_mode(MODE_EDIT);
+        editor_status("unsaved! ctrl+s, or close again");
+        return true;
+    }
+
+    if (ev->type == SDL_EVENT_KEY_DOWN && !ev->key.repeat) {
+        bool ctrl = ev->key.mod & SDL_KMOD_CTRL;
+        if (ev->key.key == SDLK_F11) {
+            SDL_SetWindowFullscreen(win, !(SDL_GetWindowFlags(win) & SDL_WINDOW_FULLSCREEN));
+            return true;
+        }
+        if (ctrl && ev->key.key == SDLK_S) {
+            save();
+            return true;
+        }
+        if (ctrl && ev->key.key == SDLK_R) {
+            run();
+            set_mode(MODE_RUN);
+            return true;
+        }
+        if (ev->key.key == SDLK_ESCAPE) {
+            if (mode == MODE_RUN) {
+                set_mode(MODE_EDIT);
+                if (failed && error_line() > 0) editor_goto_line(error_line());
+            } else {
+                if (cart.version != run_version || failed) run();
+                set_mode(MODE_RUN);
+            }
+            return true;
+        }
+    }
+
+    if (mode == MODE_EDIT) {
+        SDL_ConvertEventToRenderCoordinates(ren, ev);
+        editor_event(ev);
+    }
+    return true;
+}
+
 int main(int argc, char **argv) {
     if (argc > 2 && strcmp(argv[1], "--check") == 0) {
-        if (api_check(argv[2], err, sizeof err)) return 0;
+        Cart c = {0};
+        if (cart_read(argv[2], &c, err, sizeof err)
+            && api_check(argv[2], c.code, c.code_len, err, sizeof err)) {
+            cart_free(&c);
+            return 0;
+        }
+        cart_free(&c);
         puts(err);
         return 1;
     }
@@ -109,22 +212,25 @@ int main(int argc, char **argv) {
     SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST);
 
     srand((unsigned)SDL_GetTicksNS());
-    cart_load();
+    cart_set_code(&cart, "", 0);
+    editor_init(&cart, cart_path, win, &saved_version);
+
+    /* A missing file starts a new cart in the editor. */
+    if (file_mtime(cart_path) == 0) {
+        set_mode(MODE_EDIT);
+        editor_status("new cart - ctrl+s to save");
+    } else {
+        if (load_file()) run();
+        set_mode(MODE_RUN);
+    }
 
     static uint32_t pixels[SCREEN_W * SCREEN_H];
     Uint64 prev = SDL_GetTicksNS(), acc = STEP_NS, last_check = 0;
-    bool running = true;
+    bool running = true, quit_warned = false;
 
     while (running) {
         SDL_Event ev;
-        while (SDL_PollEvent(&ev)) {
-            if (ev.type == SDL_EVENT_QUIT) running = false;
-            if (ev.type != SDL_EVENT_KEY_DOWN || ev.key.repeat) continue;
-            if (ev.key.key == SDLK_ESCAPE) running = false;
-            if (ev.key.key == SDLK_R && (ev.key.mod & SDL_KMOD_CTRL)) cart_load();
-            if (ev.key.key == SDLK_F11)
-                SDL_SetWindowFullscreen(win, !(SDL_GetWindowFlags(win) & SDL_WINDOW_FULLSCREEN));
-        }
+        while (running && SDL_PollEvent(&ev)) running = handle_event(ren, win, &ev, &quit_warned);
 
         Uint64 now = SDL_GetTicksNS();
         acc += now - prev;
@@ -134,14 +240,23 @@ int main(int argc, char **argv) {
         /* Hot reload when the cart file changes on disk. */
         if (now - last_check > SDL_NS_PER_SECOND / 2) {
             last_check = now;
-            if (file_mtime(cart_path) != cart_mtime) cart_load();
+            SDL_Time mtime = file_mtime(cart_path);
+            if (mtime != 0 && mtime != cart_mtime) {
+                if (unsaved()) {
+                    cart_mtime = mtime;
+                    editor_status("file changed on disk; not reloaded");
+                } else if (load_file()) {
+                    if (mode == MODE_RUN) run();
+                    else editor_status("reloaded");
+                }
+            }
         }
 
         bool ticked = false;
         while (acc >= STEP_NS) {
             acc -= STEP_NS;
             ticked = true;
-            if (failed) continue;
+            if (mode != MODE_RUN || failed) continue;
             api_input(read_buttons());
             if (!api_call(L, "_update", err, sizeof err)) fail();
         }
@@ -150,8 +265,12 @@ int main(int argc, char **argv) {
             continue;
         }
 
-        if (!failed && !api_call(L, "_draw", err, sizeof err)) fail();
-        if (failed) draw_error();
+        if (mode == MODE_EDIT) {
+            editor_draw();
+        } else {
+            if (!failed && !api_call(L, "_draw", err, sizeof err)) fail();
+            if (failed) draw_error();
+        }
 
         gfx_to_rgb(pixels);
         SDL_UpdateTexture(tex, NULL, pixels, SCREEN_W * sizeof pixels[0]);
@@ -162,6 +281,7 @@ int main(int argc, char **argv) {
     }
 
     if (L) lua_close(L);
+    cart_free(&cart);
     SDL_DestroyTexture(tex);
     SDL_DestroyRenderer(ren);
     SDL_DestroyWindow(win);
