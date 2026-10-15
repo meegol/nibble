@@ -19,7 +19,10 @@ build:
 run: nibble
 	./nibble carts/demo.lua
 
+test:
+	lua5.4 tests/nib_test.lua
+
 clean:
 	rm -rf build nibble
 
-.PHONY: run clean
+.PHONY: run test clean
