@@ -1,10 +1,11 @@
-/* Renders the editor after a scripted list of input steps, saved as a 4x PNG.
+/* Renders the editor (or, with cart "menu", the cart menu over ./carts) after a scripted list of input steps, saved as a 4x PNG.
    Usage: shot cart.nib out.png [step...]
    Steps: key:NAME  ctrl+key:NAME  shift+key:NAME  text:STRING  click:X,Y  rclick:X,Y
           drag:X0,Y0,X1,Y1  wheel:N  frames:N (draw N frames) */
 #include "cart.h"
 #include "editor.h"
 #include "gfx.h"
+#include "menu.h"
 
 #include <SDL3/SDL.h>
 #include <stdio.h>
@@ -88,12 +89,24 @@ int main(int argc, char **argv) {
     char err[256];
     cart_set_code(&cart, "", 0);
     if (!cart_read(argv[1], &cart, err, sizeof err)) fprintf(stderr, "%s\n", err);
-    editor_init(&cart, argv[1], NULL, &saved);
-    editor_enter();
-    editor_cart_changed();
-    gfx_reset();
-    for (int i = 3; i < argc; i++) step(argv[i]);
-    editor_draw();
+    if (strcmp(argv[1], "menu") == 0) {
+        menu_open("carts");
+        for (int i = 3; i < argc; i++) {
+            SDL_Event ev = {0};
+            ev.type = SDL_EVENT_KEY_DOWN;
+            ev.key.key = SDL_GetKeyFromName(argv[i]);
+            const char *chosen = menu_event(&ev);
+            if (chosen) printf("chose %s\n", chosen);
+        }
+        menu_draw();
+    } else {
+        editor_init(&cart, argv[1], NULL, &saved);
+        editor_enter();
+        editor_cart_changed();
+        gfx_reset();
+        for (int i = 3; i < argc; i++) step(argv[i]);
+        editor_draw();
+    }
 
     static uint32_t px[SCREEN_W * SCREEN_H];
     gfx_to_rgb(px);

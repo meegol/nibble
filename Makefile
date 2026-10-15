@@ -25,7 +25,7 @@ build:
 	mkdir -p build
 
 run: nibble
-	./nibble carts/demo.nib
+	./nibble
 
 test: build/cart_test build/gfx_test build/shot
 	lua5.4 tests/nib_test.lua
@@ -37,7 +37,7 @@ build/cart_test: tests/cart_test.c build/cart.o build/gfx.o
 	$(CC) $(CFLAGS) -Isrc -o $@ $^ $(LDLIBS)
 
 # Headless editor screenshots: build/shot cart out.png [steps...]
-EDITOR_OBJ := build/editor.o build/code_edit.o build/sprite_edit.o build/help.o build/cart.o build/gfx.o build/api.o
+EDITOR_OBJ := build/editor.o build/code_edit.o build/sprite_edit.o build/help.o build/menu.o build/cart.o build/gfx.o build/api.o
 build/shot: tests/shot.c $(EDITOR_OBJ)
 	$(CC) $(CFLAGS) -Isrc -o $@ $^ $(LDLIBS)
 

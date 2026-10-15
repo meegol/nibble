@@ -57,6 +57,7 @@ static const char *TEXT[] = {
     ">esc       game <-> editor",
     ">ctrl+r    run from the start",
     ">ctrl+s    save",
+    ">ctrl+o    cart menu",
     ">ctrl+tab  next tab   f1 help",
     "",
     "=GAME LOOP",
@@ -101,9 +102,9 @@ static const char *TEXT[] = {
     ">del  clear    ctrl+c/v",
     "",
     "=LEARN",
-    "carts/learn has 6 lessons.",
-    "open one: ./nibble carts/",
-    "learn/01_lua.nib",
+    "6 lessons in carts/learn.",
+    "ctrl+o opens the cart menu:",
+    "start with learn/01_lua.nib",
 };
 #define NUM_TEXT (int)(sizeof TEXT / sizeof TEXT[0])
 

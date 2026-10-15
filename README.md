@@ -7,13 +7,17 @@ Written in C with SDL3 and Lua 5.4.
 
 ```sh
 make            # needs sdl3 and lua5.4 (Arch: pacman -S sdl3 lua54)
-make run        # runs carts/demo.nib
+make run        # opens the cart menu
 make test       # tests (needs lua5.4)
+./nibble                            # cart menu
 ./nibble path/to/cart.nib
 ./nibble --check path/to/cart.nib   # report syntax errors without running
 ```
 
 `--check` prints `file:line: message` and exits 1 on an error, so it can be used as a linter from another editor.
+
+Without a file, nibble opens a menu of the carts in `carts/` (and its subfolders), with
+an entry for a new cart. Ctrl+O gets back to it.
 
 Esc switches between the game and the editor. Saving the cart file from another editor
 reloads it automatically, unless there are unsaved changes in nibble. Lua errors show on
@@ -28,6 +32,7 @@ opens as a new, empty cart.
 | Esc | game → editor; editor → game (restarts if anything was edited) |
 | Ctrl+R | run from the start |
 | Ctrl+S | save |
+| Ctrl+O | cart menu |
 | Ctrl+Tab | next editor tab |
 | F1 | help |
 | F11 | fullscreen |

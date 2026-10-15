@@ -2,6 +2,7 @@
 #include "cart.h"
 #include "editor.h"
 #include "gfx.h"
+#include "menu.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -15,9 +16,12 @@
 #define MAX_CATCHUP  4
 #define ERR_COLS     (SCREEN_W / FONT_W - 1)
 
-enum { MODE_RUN, MODE_EDIT };
+enum { MODE_RUN, MODE_EDIT, MODE_MENU };
 
-static const char *cart_path;
+#define CARTS_DIR "carts"
+
+static char *cart_path;         /* NULL until a cart is opened */
+static SDL_Window *window;
 static Cart cart;
 static unsigned saved_version;  /* cart.version when last read or written */
 static unsigned run_version;    /* cart.version the running game started from */
@@ -83,6 +87,40 @@ static void set_mode(int m) {
     mode = m;
     if (m == MODE_EDIT) editor_enter();
     else editor_leave();
+    if (m == MODE_MENU) menu_open(CARTS_DIR);
+}
+
+/* Switches to another cart file: runs it, or opens an empty one in the editor if the
+   file doesn't exist yet. */
+static void open_cart(const char *path) {
+    char *old = cart_path;
+    cart_path = SDL_strdup(path);
+    if (L) lua_close(L);
+    L = NULL;
+    failed = false;
+
+    cart_set_code(&cart, "", 0);
+    memset(cart.sheet, 0, sizeof cart.sheet);
+    memset(cart.flags, 0, sizeof cart.flags);
+    memset(cart.map, 0, sizeof cart.map);
+    cart.version++;
+    saved_version = cart.version;
+    editor_init(&cart, cart_path, window, &saved_version);
+    editor_cart_changed();
+    SDL_free(old);
+
+    char title[300];
+    snprintf(title, sizeof title, "nibble - %s", cart_path);
+    SDL_SetWindowTitle(window, title);
+
+    if (file_mtime(cart_path) == 0) {
+        cart_mtime = 0;
+        set_mode(MODE_EDIT);
+        editor_status("new cart - ctrl+s to save");
+    } else {
+        if (load_file()) run();
+        set_mode(MODE_RUN);
+    }
 }
 
 /* Line number of the first "path:LINE:" in the error, or 0. */
@@ -145,6 +183,22 @@ static bool handle_event(SDL_Renderer *ren, SDL_Window *win, SDL_Event *ev, bool
             SDL_SetWindowFullscreen(win, !(SDL_GetWindowFlags(win) & SDL_WINDOW_FULLSCREEN));
             return true;
         }
+        if (ctrl && ev->key.key == SDLK_O) {
+            if (cart_path && unsaved()) {
+                set_mode(MODE_EDIT);
+                editor_status("unsaved! ctrl+s first");
+            } else {
+                set_mode(MODE_MENU);
+            }
+            return true;
+        }
+        if (mode == MODE_MENU) {
+            SDL_ConvertEventToRenderCoordinates(ren, ev);
+            const char *chosen = menu_event(ev);
+            if (chosen) open_cart(chosen);
+            else if (ev->key.key == SDLK_ESCAPE && cart_path) set_mode(MODE_EDIT);
+            return true;
+        }
         if (ctrl && ev->key.key == SDLK_S) {
             save();
             return true;
@@ -173,7 +227,11 @@ static bool handle_event(SDL_Renderer *ren, SDL_Window *win, SDL_Event *ev, bool
         }
     }
 
-    if (mode == MODE_EDIT) {
+    if (mode == MODE_MENU) {
+        SDL_ConvertEventToRenderCoordinates(ren, ev);
+        const char *chosen = menu_event(ev);
+        if (chosen) open_cart(chosen);
+    } else if (mode == MODE_EDIT) {
         SDL_ConvertEventToRenderCoordinates(ren, ev);
         editor_event(ev);
     }
@@ -193,19 +251,14 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    cart_path = argc > 1 ? argv[1] : "carts/demo.nib";
-
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
     }
 
-    char title[256];
-    snprintf(title, sizeof title, "nibble - %s", cart_path);
-
     SDL_Window *win;
     SDL_Renderer *ren;
-    if (!SDL_CreateWindowAndRenderer(title, SCREEN_W * SCALE, SCREEN_H * SCALE,
+    if (!SDL_CreateWindowAndRenderer("nibble", SCREEN_W * SCALE, SCREEN_H * SCALE,
                                      SDL_WINDOW_RESIZABLE, &win, &ren)) {
         fprintf(stderr, "SDL_CreateWindowAndRenderer: %s\n", SDL_GetError());
         return 1;
@@ -218,18 +271,11 @@ int main(int argc, char **argv) {
                                          SDL_TEXTUREACCESS_STREAMING, SCREEN_W, SCREEN_H);
     SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST);
 
+    window = win;
     srand((unsigned)SDL_GetTicksNS());
-    cart_set_code(&cart, "", 0);
-    editor_init(&cart, cart_path, win, &saved_version);
-
-    /* A missing file starts a new cart in the editor. */
-    if (file_mtime(cart_path) == 0) {
-        set_mode(MODE_EDIT);
-        editor_status("new cart - ctrl+s to save");
-    } else {
-        if (load_file()) run();
-        set_mode(MODE_RUN);
-    }
+    /* with a file: open it; without: pick one from the menu */
+    if (argc > 1) open_cart(argv[1]);
+    else set_mode(MODE_MENU);
 
     static uint32_t pixels[SCREEN_W * SCREEN_H];
     Uint64 prev = SDL_GetTicksNS(), acc = STEP_NS, last_check = 0;
@@ -245,7 +291,7 @@ int main(int argc, char **argv) {
         if (acc > STEP_NS * MAX_CATCHUP) acc = STEP_NS * MAX_CATCHUP;
 
         /* Hot reload when the cart file changes on disk. */
-        if (now - last_check > SDL_NS_PER_SECOND / 2) {
+        if (cart_path && now - last_check > SDL_NS_PER_SECOND / 2) {
             last_check = now;
             SDL_Time mtime = file_mtime(cart_path);
             if (mtime != 0 && mtime != cart_mtime) {
@@ -272,7 +318,9 @@ int main(int argc, char **argv) {
             continue;
         }
 
-        if (mode == MODE_EDIT) {
+        if (mode == MODE_MENU) {
+            menu_draw();
+        } else if (mode == MODE_EDIT) {
             editor_draw();
         } else {
             if (!failed && !api_call(L, "_draw", err, sizeof err)) fail();
@@ -289,6 +337,7 @@ int main(int argc, char **argv) {
 
     if (L) lua_close(L);
     cart_free(&cart);
+    SDL_free(cart_path);
     SDL_DestroyTexture(tex);
     SDL_DestroyRenderer(ren);
     SDL_DestroyWindow(win);
